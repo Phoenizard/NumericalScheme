@@ -6,7 +6,8 @@ import torch
 
 
 def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
-          total_shift=None, relax=False, *, esav_scheme=None, eta=None):
+          total_shift=None, relax=False, *, esav_scheme=None, eta=None, metrics_fn=None):
+    """Record each state and optional scalar metrics, then apply one optimizer step."""
     if eta is not None:
         if esav_scheme != "plan1" or not relax:
             raise ValueError("eta is only supported by relaxed PB-Exp-SAV Plan 1")
@@ -51,6 +52,8 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                             zip(state["log_r_i"], energies), start=1):
                         row[f"log_r_{i}"] = log_r_i.item()
                         row[f"r_{i}_over_exp_E_{i}"] = (log_r_i - value).exp().item()
+            if metrics_fn is not None:
+                row.update(metrics_fn())
         if not all(math.isfinite(value) for value in row.values()):
             raise FloatingPointError(f"Non-finite result at iteration {iteration}")
         history.append(row)

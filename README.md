@@ -4,114 +4,126 @@
 
 ```text
 NumericalScheme/
-├── problem/                  # 问题定义、参数初始化与损失函数
-│   └── quadratic.py          # 二次问题；提供 Total Energy Loss 和 Split Energy Loss
-├── optimizer/                # 优化算法的参数更新与辅助变量更新
-│   ├── sav.py                # SAV 单步更新
-│   ├── pb_sav.py             # PB-SAV 单步更新
-│   └── pb_esav.py            # PB-Exp-SAV Plan 1 / Plan 2 单步更新
-├── network/                  # 模型网络（预留）
-├── data/                     # 数据集目录
-├── doc/                      # 参考论文、算法推导与研究记录
-│   └── PB-Exp-SAV-Plan.md     # PB-Exp-SAV 推导与方案文档
-├── results/                  # 实验记录、运行参数与图表
-├── run.py                    # 命令行入口：选择问题、方法与损失，保存结果
-├── train.py                  # 统一迭代循环与过程记录
-├── plot_figure.py            # 仅读取已有实验记录并绘图
-├── requirements.txt          # Python 依赖
-└── README.md                 # 目录与功能说明
+├── problem/
+│   ├── config.py                 # 按问题分区的固定超参数
+│   ├── quadratic.py              # 二次问题与能量分裂
+│   └── nonlinear_regression.py   # 数据生成、分组损失、测试 MSE
+├── network/
+│   └── nonlinear_regression.py   # 单隐层 tanh 网络与初始化
+├── optimizer/
+│   ├── sav.py                    # SAV 单步更新
+│   ├── pb_sav.py                 # PB-SAV 单步更新
+│   └── pb_esav.py                # PB-ESAV Plan 1 / Plan 2 单步更新
+├── data/                         # 固定输入数据，默认不加入 Git
+├── doc/                          # 论文、推导与实验设计
+├── results/                      # 每组实验的配置和逐步记录
+├── run.py                        # 组装并运行一组实验
+├── train.py                      # 公共迭代循环与指标采集
+├── plot_figure.py                 # 读取已有结果绘图
+└── requirements.txt
 ```
 
-## 算法库
+## 环境与配置
 
-在项目根目录激活环境：
+从项目根目录运行：
 
 ```bash
 conda activate numenv
 ```
 
-以下以二次问题为例。`run.py` 负责运行和保存，`plot_figure.py` 负责绘图。
-每个实验目录包含 `config.json`（运行配置）和 `history.csv`（逐步记录）。
-`iteration` 表示 epoch，0 为初始状态；300 步实验包含 301 行数据。
-SAV、PB-SAV 和 PB-Exp-SAV 添加 `--relax` 可启用各自的松弛更新。
+固定设置只在 [problem/config.py](problem/config.py) 的 `PROBLEMS` 字典中修改，
+分别对应 `quadratic` 和 `nonlinear_regression`。学习率、更新次数、shift、
+随机种子、网络宽度等不通过命令行覆盖。
 
-### PB-Exp-SAV
+命令行选择问题、方法、PB-ESAV Plan 和研究变量，并用 `--output` 指定结果目录。
+旧命令中的 `--lr`、`--steps`、`--lambda-reg`、`--total-shift`、
+`--relax`、`--eta`、`--model`、`--data` 已移除。
 
-依据 `doc/PB-Exp-SAV-Plan.md` 实现两种方案。Plan 1 只演化总辅助变量，
-Plan 2 同时演化总辅助变量与局部辅助变量，均以对数形式保存。
-算法不使用 shift，传入 `--total-shift` 会报错；添加 `--relax` 可启用
-文档中的对数辅助变量修正。Plan 1 用 `--eta` 指定允许回补的耗散比例，
-要求为有限值且位于 `[0, 1]`，省略时默认 1。只有 relaxed Plan 1 接受
-`--eta`；Plan 2 保留共同混合系数修正各分量的旧规则。
+## 非线性回归
 
-```bash
-python -B run.py --problem quadratic --method pb_esav --scheme plan1 --loss split --lr 10 --steps 300 --lambda-reg 0
-python -B run.py --problem quadratic --method pb_esav --scheme plan2 --loss split --lr 10 --steps 300 --lambda-reg 0
-```
+实验定义见 [Nonlinear Experiments Plan](doc/Nonlinear-Experiments-Plan.md)。
+当前配置为 30 个带噪声正弦样本、1 → 50 → 1 的 tanh 网络、全量训练、
+固定步长 0.1、600 次更新、CPU、float64，无动量、无正则化、无 Relax。
 
-默认分别保存到 `results/quadratic/pb_esav_plan1/` 和
-`results/quadratic/pb_esav_plan2/`；可用 `--output` 指定实验目录。
-两组均使用 100 维、全 1 初值、CPU 和 float64。
-
-固定步长 10、300 步，运行三组 relaxed Plan 1 实验：
+生成数据：
 
 ```bash
-python -B run.py --problem quadratic --method pb_esav --scheme plan1 --loss split --lr 10 --steps 300 --lambda-reg 0 --relax --eta 1
-python -B run.py --problem quadratic --method pb_esav --scheme plan1 --loss split --lr 10 --steps 300 --lambda-reg 0 --relax --eta 0.95
-python -B run.py --problem quadratic --method pb_esav --scheme plan1 --loss split --lr 10 --steps 300 --lambda-reg 0 --relax --eta 0.1
+python -B -m problem.nonlinear_regression
 ```
 
-默认保存到 `results/quadratic/` 下的 `pb_esav_plan1_relaxed/`、
-`pb_esav_plan1_relaxed_eta_0p95/` 和 `pb_esav_plan1_relaxed_eta_0p1/`。
-每个目录保存含实际 `eta` 的 `config.json` 和逐步 `history.csv`；同一设置
-重跑时覆盖该目录记录。普通版和已保存的 relaxed Plan 2 记录不受影响。
-每次循环的计算顺序与 relaxation 公式见 `doc/PB-Exp-SAV-Plan.md`。
+数据保存至 `data/nonlinear_regression.pt`，包含训练张量、无噪声测试张量及
+生成参数。修改样本数、区间、噪声或数据种子后，重新执行生成命令。
+训练直接读取该文件，按输入排序后循环分组；各组均使用总样本数归一化。
+每次训练使用配置中的同一初始化种子重新建立网络。
 
-记录字段：`objective` 为总能量，`energy_1`、`energy_2` 为分量能量；
-`log_r` 与 `modified_energy` 均为总辅助变量的对数，
-`r_over_exp_E` 为该步状态下的总辅助变量比值。
-Plan 2 另保存 `log_r_1`、`log_r_2` 和对应的 `r_1_over_exp_E_1`、
-`r_2_over_exp_E_2`。relaxed 版本沿用这些字段，记录修正完成后的同一步状态。
-SAV/PB-SAV 保持原有记录字段，修正能量为 `q²`。
-
-### 从已有结果绘图
+每条命令运行一组。以下三条可分别执行：
 
 ```bash
-python -B plot_figure.py --input results/quadratic/pb_esav_plan1 --output results/quadratic/pb_esav_plan1/figure.png
-python -B plot_figure.py --input results/quadratic/pb_esav_plan2 --output results/quadratic/pb_esav_plan2/figure.png
+python run.py --problem nonlinear_regression --method pb_sav --m 4 --output results/nonlinear_regression/pb_sav_m4
+python run.py --problem nonlinear_regression --method pb_esav --scheme plan1 --m 4 --output results/nonlinear_regression/pb_esav_plan1_m4
+python run.py --problem nonlinear_regression --method pb_esav --scheme plan2 --m 4 --output results/nonlinear_regression/pb_esav_plan2_m4
 ```
 
-每张图展示真实目标能量（对数纵轴）和修正能量（线性纵轴）。
-绘图脚本也支持已有 SAV/PB-SAV 实验目录，不重新运行实验。
+`--m` 可取 `1, 2, 4, 8, 16, 30`；更换 M 时同步更换输出目录。
+PB-SAV 的 M=1 即 SAV，无需单独增加一行实验。当前代码和数据已准备，
+18 组训练尚未运行。
 
-传入多个实验目录可生成对比图，左图显示目标能量，右图显示辅助变量比值
-（SAV/PB-SAV 为 `q/Q`，PB-Exp-SAV 为 `r/exp(E)`）：
+## 二次问题
+
+默认设置保持 100 维、全 1 初值、两类能量系数 1 和 0.01、步长 10、
+300 次更新、CPU、float64、无正则化。固定参数来自配置中的 `quadratic` 分区。
+`--loss split` 使用两个分量，`--loss total` 使用总能量。
 
 ```bash
-python -B plot_figure.py --input results/quadratic/sav results/quadratic/sav_relaxed results/quadratic/pb_sav results/quadratic/pb_sav_relaxed results/quadratic/pb_esav_plan1 results/quadratic/pb_esav_plan2 results/quadratic/pb_esav_plan1_relaxed results/quadratic/pb_esav_plan1_relaxed_eta_0p95 results/quadratic/pb_esav_plan1_relaxed_eta_0p1 --output results/quadratic/comparison.png
+python run.py --problem quadratic --method sav --loss total --output results/quadratic/sav_total
+python run.py --problem quadratic --method pb_sav --loss split --output results/quadratic/pb_sav_split
+python run.py --problem quadratic --method pb_esav --scheme plan1 --loss split --output results/quadratic/pb_esav_plan1
+python run.py --problem quadratic --method pb_esav --scheme plan2 --loss split --output results/quadratic/pb_esav_plan2
 ```
 
-原论文复现记录中的 SAV/PB-SAV 设置为：100 维、全 1 初值、CPU、float64、
-步长 10、300 步、无正则项、总 shift 为 `1e-10`，各含普通版与 relaxed 版。
-PB-SAV 使用两个能量分量，SAV 使用总能量；PB-Exp-SAV 两种方案使用相同
-公共实验设置与两个分量，不使用 shift。图中包含原四条 SAV/PB-SAV 曲线、
-普通 Plan 1 / Plan 2，以及三组 relaxed Plan 1，共九条曲线。
-relaxed Plan 2 不参与本次绘图，已有数据保留。
-Plan 1 三组 relaxed 曲线均为绿色：eta=1 使用实线，eta=0.95 使用方形标记虚线，
-eta=0.1 使用三角标记点线；图例标注 eta。历史 relaxed Plan 1 配置缺少 eta 时按 1 读取。
+## 结果记录
 
-### PB-SAV
+每组实验保存 `config.json` 与 `history.csv`。配置记录实际使用的方法、分组数、
+固定参数、精度和 PyTorch 版本；非线性回归另记录数据路径及文件内的生成参数。
+`iteration=0` 为初始状态，600 次更新对应 601 行记录。
 
-使用 Split Energy Loss：
+| 字段 | 含义 |
+| --- | --- |
+| `objective` | 真实总目标；回归实验为残差平方和除以 2N |
+| `test_mse` | 回归实验在无噪声测试点上的均方误差 |
+| `q`、`Q`、`q_over_Q` | SAV/PB-SAV 辅助变量、真实能量对应值及比值 |
+| `log_r`、`r_over_exp_E` | PB-ESAV 总辅助变量的对数及一致性比值 |
+| `energy_i` | PB-ESAV 各分量能量 |
+| `log_r_i`、`r_i_over_exp_E_i` | PB-ESAV Plan 2 的局部辅助变量及比值 |
+| `modified_energy` | SAV/PB-SAV 的 q²，或 PB-ESAV 的 log_r |
+
+PB-SAV 使用总 shift，并均分到各分量；PB-ESAV 不使用 shift。
+Plan 1 仅演化总辅助变量，Plan 2 同时演化总、局部辅助变量，均保留对数状态。
+推导见 [PB-ESAV 方案](doc/PB-Exp-SAV-Plan.md)。
+
+默认输出目录为 `results/<problem>/<method及分组标识>/`。
+同一路径再次运行会覆盖其配置和历史；保留旧结果时指定新的 `--output`。
+
+## 从已有结果绘图
 
 ```bash
-python run.py --problem quadratic --method pb_sav --loss split --lr 10 --steps 300 --lambda-reg 0
+python plot_figure.py --input results/nonlinear_regression/pb_esav_plan1_m4 --output results/nonlinear_regression/pb_esav_plan1_m4/figure.png
 ```
 
-### SAV
-
-使用 Total Energy Loss：
+单组图显示目标能量和修正能量。传入多个目录可对比目标能量和辅助变量比值：
 
 ```bash
-python run.py --problem quadratic --method sav --loss total --lr 10 --steps 300 --lambda-reg 0
+python plot_figure.py --input results/nonlinear_regression/pb_sav_m4 results/nonlinear_regression/pb_esav_plan1_m4 results/nonlinear_regression/pb_esav_plan2_m4 --output results/nonlinear_regression/comparison_m4.png
 ```
+
+绘图只读取已完成的实验记录。当前绘图脚本不展示测试 MSE，该指标保存在 CSV 中。
+
+## 历史 Relax 实验
+
+已有 Relax 实现、配置与结果保留；当前研究不开展 Relax 参数扫描。
+旧二次问题记录包含 SAV/PB-SAV 的普通版与 Relax 版、PB-ESAV 两种 Plan，
+以及 Plan 1 的 eta=1、0.95、0.1 三组 Relax 结果。旧数据的路径保持原样，
+可继续使用绘图脚本读取。
+
+Plan 1 的 Relax 对比图中，eta=1 为实线，0.95 为方形标记虚线，
+0.1 为三角形标记点线；历史配置缺少 eta 时按 1 读取。
