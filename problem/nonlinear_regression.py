@@ -1,4 +1,4 @@
-"""Noisy sine data, round-robin energy splitting, and clean test error."""
+"""Noisy sine data, nested random energy splitting, and clean test error."""
 
 from pathlib import Path
 
@@ -43,13 +43,25 @@ def generate_data() -> Path:
     return path
 
 
-def split_energy_loss(model, x, y, m: int, lambda_reg: float = 0.0):
-    """Return M energies for sorted (N, 1) sample pairs, normalized by 2N."""
+def make_groups(n: int, m: int, seed: int):
+    """Bisect the largest group of a fixed random permutation to obtain nested partitions."""
+    if not 1 <= m <= n:
+        raise ValueError("Require 1 <= number of groups <= number of samples")
+    generator = torch.Generator().manual_seed(seed)
+    groups = [torch.randperm(n, generator=generator)]
+    while len(groups) < m:
+        index = max(range(len(groups)), key=lambda i: len(groups[i]))
+        groups[index:index + 1] = list(groups[index].tensor_split(2))
+    return groups
+
+
+def split_energy_loss(model, x, y, groups, lambda_reg: float = 0.0):
+    """Return energies for disjoint index groups, all normalized by total sample count 2N."""
     residual_squared = (model(x) - y).square()
-    terms = [residual_squared[k::m].sum() / (2 * len(x)) for k in range(m)]
+    terms = [residual_squared[group].sum() / (2 * len(x)) for group in groups]
     if lambda_reg:
         regularization = lambda_reg * sum(p.square().sum() for p in model.parameters()) / 2
-        terms = [term + regularization / m for term in terms]
+        terms = [term + regularization / len(groups) for term in terms]
     return terms
 
 

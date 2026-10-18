@@ -25,6 +25,7 @@ PROBLEMS = {
         "x_max": 1.0,
         "noise_std": 0.1,
         "noise_seed": 1,
+        "partition_seed": 3,
         "data_path": "data/nonlinear_regression.pt",
         # 网络：1 → hidden_width → 1，单隐层 tanh
         "hidden_width": 50,
@@ -32,11 +33,17 @@ PROBLEMS = {
         "hidden_init_max": 1.0,
         "init_seed": 2,
         # 输出层初始化范围为 ±1 / sqrt(hidden_width)
-        # 训练：全量样本，无动量
-        "lr": 0.1,
+        # 训练：全量样本，无动量；600 次接受的更新
+        "lr": 100.0,  # 每轮 Armijo 回溯的初始学习率，也是学习率上限
         "steps": 600,
         "lambda_reg": 0.0,
         "relax": False,
+        # 每轮从 lr 开始，拒绝后学习率减半并重新计算候选更新
+        "line_search": {
+            "min_lr": 1e-6,
+            "shrink": 0.5,
+            "armijo_c": 1e-4,
+        },
         # 算法：total_shift 仅用于 SAV / PB-SAV，各分量使用 C / M
         "total_shift": 1e-10,
         # 计算

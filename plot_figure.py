@@ -21,8 +21,20 @@ def load_experiment(input_dir):
     return config, rows
 
 
+def step_label(config):
+    """Describe the recorded step policy without treating adaptive runs as fixed-step runs."""
+    search = config.get("line_search")
+    if search is not None:
+        if config.get("step_policy") == "armijo_lr_reset":
+            return f"Armijo: reset lr={config['lr']:g}, halve on rejection"
+        return f"adaptive Armijo [{search['min_lr']:g}, {search['max_lr']:g}]"
+    return f"fixed step = {config['lr']:g}"
+
+
 def plot_experiment(input_dir, output):
     config, rows = load_experiment(input_dir)
+    if config["method"] == "gd":
+        return plot_training_curves([input_dir], output)
     iterations = [int(row["iteration"]) for row in rows]
     objectives = [float(row["objective"]) for row in rows]
     modified = [float(row["modified_energy"]) for row in rows]
@@ -52,7 +64,7 @@ def plot_experiment(input_dir, output):
     for axis in axes:
         axis.set_xlabel("Iteration (epoch)")
         axis.grid(True, alpha=0.2)
-    fig.suptitle(f"{config['problem'].capitalize()} | {label} | step = {config['lr']:g}")
+    fig.suptitle(f"{config['problem'].capitalize()} | {label} | {step_label(config)}")
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=200)
@@ -63,11 +75,13 @@ def plot_experiment(input_dir, output):
 
 def plot_comparison(input_dirs, output):
     experiments = [load_experiment(path) for path in input_dirs]
+    if any(config["method"] == "gd" for config, _ in experiments):
+        return plot_training_curves(input_dirs, output)
     reference = experiments[0][0]
     shared = ("problem", "dimension", "initial_value", "device", "dtype",
-              "lr", "steps", "lambda_reg")
+              "lr", "steps", "lambda_reg", "line_search")
     for config, _ in experiments[1:]:
-        if any(config[key] != reference[key] for key in shared):
+        if any(config.get(key) != reference.get(key) for key in shared):
             raise ValueError("Comparison requires matching problem and experiment settings")
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.2), layout="constrained")
@@ -129,8 +143,49 @@ def plot_comparison(input_dirs, output):
         shift_note = "SAV/PB-SAV shift = " + ", ".join(f"{v:g}" for v in sorted(shifts))
     if has_esav:
         shift_note += ("; " if shift_note else "") + "PB-Exp-SAV: no shift"
-    fig.suptitle(f"{reference['problem'].capitalize()} benchmark | step = {reference['lr']:g}, "
+    fig.suptitle(f"{reference['problem'].capitalize()} benchmark | {step_label(reference)}, "
                  f"regularization = {reference['lambda_reg']:g}\n{shift_note}")
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=200)
+    plt.close(fig)
+    print(f"Figure: {output.resolve()}")
+    return output
+
+
+def plot_training_curves(input_dirs, output):
+    """Compare saved training objectives and noise-free test MSE histories."""
+    experiments = [load_experiment(path) for path in input_dirs]
+    styles = {
+        ("gd", None): ("GD", "#333333", "-.", None),
+        ("pb_sav", None): ("PB-SAV", "#3568a8", "-", None),
+        ("pb_esav", "plan1"): ("PB-ESAV Plan 1", "#d16a2c", "--", None),
+        ("pb_esav", "plan2"): ("PB-ESAV Plan 2", "#218c60", ":", "o"),
+    }
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.8), layout="constrained")
+    for config, rows in experiments:
+        label, color, style, marker = styles[(config["method"], config.get("scheme"))]
+        label += f" ($M={config['components']}$)"
+        iterations = [int(row["iteration"]) for row in rows]
+        for axis, key in zip(axes, ("objective", "test_mse")):
+            axis.plot(
+                iterations, [float(row[key]) for row in rows], label=label,
+                color=color, linestyle=style, linewidth=1.8, marker=marker,
+                markevery=60, markersize=5, markerfacecolor="none",
+            )
+    axes[0].set(title="Training objective", ylabel=r"$F(\theta)$")
+    axes[1].set(title="Test error (noise-free target)", ylabel="Test MSE")
+    for axis in axes:
+        axis.set_xlabel("Parameter updates")
+        axis.grid(True, alpha=0.2)
+        axis.spines[["top", "right"]].set_visible(False)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="outside lower center", ncol=4, frameon=False)
+    reference = experiments[0][0]
+    policies = list(dict.fromkeys(step_label(config) for config, _ in experiments))
+    fig.suptitle(
+        f"Nonlinear regression | {reference['steps']} updates\n" + "; ".join(policies)
+    )
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=200)
@@ -144,8 +199,12 @@ def main():
     parser.add_argument("--input", type=Path, nargs="+", required=True,
                         help="One or more directories containing config.json and history.csv")
     parser.add_argument("--output", type=Path, required=True, help="Output figure path")
+    parser.add_argument("--training", action="store_true",
+                        help="Plot training objective and test MSE for nonlinear regression")
     args = parser.parse_args()
-    if len(args.input) == 1:
+    if args.training:
+        plot_training_curves(args.input, args.output)
+    elif len(args.input) == 1:
         plot_experiment(args.input[0], args.output)
     else:
         plot_comparison(args.input, args.output)
