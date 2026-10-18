@@ -77,18 +77,18 @@ def _armijo_step(parameters, loss_fn, update_fn, initial_lr, settings, iteration
 
 def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
           total_shift=None, relax=False, *, esav_scheme=None, eta=None, metrics_fn=None,
-          method=None, line_search=None, history=None):
+          method=None, line_search=None, history=None, curvature_shift=None):
     """Record initial/accepted states; rejected trials do not consume the update budget."""
     if eta is not None:
         if esav_scheme != "plan1" or not relax:
-            raise ValueError("eta is only supported by relaxed PB-Exp-SAV Plan 1")
+            raise ValueError("eta is only supported by relaxed PB Naive ESAV Plan 1")
         if not math.isfinite(eta) or not 0 <= eta <= 1:
             raise ValueError("eta must be finite and in [0, 1]")
     if esav_scheme is not None:
         if esav_scheme not in ("plan1", "plan2"):
-            raise ValueError(f"Unsupported PB-Exp-SAV scheme: {esav_scheme}")
+            raise ValueError(f"Unsupported ESAV scheme: {esav_scheme}")
         if total_shift is not None:
-            raise ValueError("PB-Exp-SAV does not support shift")
+            raise ValueError("ESAV auxiliary energies do not use total_shift")
     elif method != "gd":
         total_shift = 1e-10 if total_shift is None else total_shift
     if line_search is not None:
@@ -123,20 +123,26 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                            modified_energy=q.square().item())
             elif esav_scheme is not None:
                 energies = torch.stack(terms)
+                local_energy = energies
+                if esav_scheme == "plan2" and curvature_shift is not None:
+                    local_energy = energies + 0.5 * (
+                        energies + curvature_shift / len(terms)
+                    ).log()
                 if state is None:
                     state = {"log_r": energy.detach().clone()}
                     if esav_scheme == "plan2":
-                        state["log_r_i"] = energies.detach().clone()
+                        state["log_r_i"] = local_energy.detach().clone()
                 row.update(log_r=state["log_r"].item(),
                            r_over_exp_E=(state["log_r"] - energy).exp().item(),
                            modified_energy=state["log_r"].item())
                 for i, value in enumerate(energies, start=1):
                     row[f"energy_{i}"] = value.item()
                 if esav_scheme == "plan2":
+                    ratio_name = "auxiliary_energy" if curvature_shift is not None else "E"
                     for i, (log_r_i, value) in enumerate(
-                            zip(state["log_r_i"], energies), start=1):
+                            zip(state["log_r_i"], local_energy), start=1):
                         row[f"log_r_{i}"] = log_r_i.item()
-                        row[f"r_{i}_over_exp_E_{i}"] = (log_r_i - value).exp().item()
+                        row[f"r_{i}_over_exp_{ratio_name}_{i}"] = (log_r_i - value).exp().item()
             if metrics_fn is not None:
                 row.update(metrics_fn())
             if line_search is not None:

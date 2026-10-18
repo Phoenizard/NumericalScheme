@@ -31,6 +31,22 @@ def step_label(config):
     return f"fixed step = {config['lr']:g}"
 
 
+def esav_label(config):
+    """Distinguish current, naive, and historical diagnostic ESAV records."""
+    variant = config.get("esav_variant")
+    diagnostic = config.get("debug_curvature", "")
+    if variant == "exp_log_energy":
+        name = "PB-ESAV"
+    elif variant == "sqrt_energy" or diagnostic.startswith("Square-root energy pullback"):
+        name = "PB-ESAV (former sqrt scheme)"
+    elif diagnostic:
+        name = "PB-ESAV (residual diagnostic)"
+    else:
+        # Records predating the rename used method=pb_esav for the naive scheme.
+        name = "PB Naive ESAV"
+    return f"{name} Plan {config['scheme'][-1]}"
+
+
 def plot_experiment(input_dir, output):
     config, rows = load_experiment(input_dir)
     if config["method"] == "gd":
@@ -39,8 +55,8 @@ def plot_experiment(input_dir, output):
     objectives = [float(row["objective"]) for row in rows]
     modified = [float(row["modified_energy"]) for row in rows]
     method = config["method"]
-    if method == "pb_esav":
-        label = f"PB-Exp-SAV {config['scheme']}"
+    if method in ("pb_esav", "pb_naive_esav"):
+        label = esav_label(config)
         if config.get("relax", False):
             label += " (relaxed)"
             if config["scheme"] == "plan1":
@@ -90,9 +106,9 @@ def plot_comparison(input_dirs, output):
     for config, rows in experiments:
         method = config["method"]
         marker = None
-        if method == "pb_esav":
+        if method in ("pb_esav", "pb_naive_esav"):
             scheme = config["scheme"]
-            label = f"PB-Exp-SAV {scheme}"
+            label = esav_label(config)
             color, style = {"plan1": ("#218c60", "-."),
                             "plan2": ("#8953b1", ":")}[scheme]
             if config.get("relax", False):
@@ -130,7 +146,7 @@ def plot_comparison(input_dirs, output):
     axes[0].set(title="Objective energy", ylabel=r"$E(x^n)$")
     ratio_label = (r"$q^n/Q(x^n)$ (SAV/PB-SAV)" if shifts else "")
     if has_esav:
-        ratio_label += ("\n" if ratio_label else "") + r"$r^n/\exp(E(x^n))$ (PB-Exp-SAV)"
+        ratio_label += ("\n" if ratio_label else "") + r"$r^n/\exp(E(x^n))$ (ESAV)"
     axes[1].set(title="Auxiliary-variable ratio", ylabel=ratio_label)
     for axis in axes:
         axis.set_xlabel("Iteration (epoch)")
@@ -142,7 +158,7 @@ def plot_comparison(input_dirs, output):
     if shifts:
         shift_note = "SAV/PB-SAV shift = " + ", ".join(f"{v:g}" for v in sorted(shifts))
     if has_esav:
-        shift_note += ("; " if shift_note else "") + "PB-Exp-SAV: no shift"
+        shift_note += ("; " if shift_note else "") + "ESAV total auxiliary: exp(E)"
     fig.suptitle(f"{reference['problem'].capitalize()} benchmark | {step_label(reference)}, "
                  f"regularization = {reference['lambda_reg']:g}\n{shift_note}")
     output = Path(output)
@@ -161,10 +177,17 @@ def plot_training_curves(input_dirs, output):
         ("pb_sav", None): ("PB-SAV", "#3568a8", "-", None),
         ("pb_esav", "plan1"): ("PB-ESAV Plan 1", "#d16a2c", "--", None),
         ("pb_esav", "plan2"): ("PB-ESAV Plan 2", "#218c60", ":", "o"),
+        ("pb_naive_esav", "plan1"): ("PB Naive ESAV Plan 1", "#8953b1", "--", None),
+        ("pb_naive_esav", "plan2"): ("PB Naive ESAV Plan 2", "#8c564b", ":", "s"),
     }
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.8), layout="constrained")
     for config, rows in experiments:
-        label, color, style, marker = styles[(config["method"], config.get("scheme"))]
+        style_method = config["method"]
+        if style_method == "pb_esav" and esav_label(config).startswith("PB Naive ESAV"):
+            style_method = "pb_naive_esav"
+        label, color, style, marker = styles[(style_method, config.get("scheme"))]
+        if config["method"] in ("pb_esav", "pb_naive_esav"):
+            label = esav_label(config)
         label += f" ($M={config['components']}$)"
         iterations = [int(row["iteration"]) for row in rows]
         for axis, key in zip(axes, ("objective", "test_mse")):

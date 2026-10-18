@@ -11,7 +11,7 @@ PROBLEMS = {
         "steps": 300,
         "lambda_reg": 0.0,
         "relax": False,
-        # 算法：total_shift 仅用于 SAV / PB-SAV
+        # 算法：SAV / PB-SAV 的总 shift；PB-ESAV 用于局部对数能量与曲率分母
         "total_shift": 1e-10,
         # 计算
         "device": "cpu",
@@ -44,7 +44,7 @@ PROBLEMS = {
             "shrink": 0.5,
             "armijo_c": 1e-4,
         },
-        # 算法：total_shift 仅用于 SAV / PB-SAV，各分量使用 C / M
+        # 算法：SAV / PB-SAV 的总 shift；PB-ESAV 用于局部对数能量与曲率分母
         "total_shift": 1e-10,
         # 计算
         "device": "cpu",
