@@ -7,7 +7,7 @@ PROBLEMS = {
         "initial_value": 1.0,
         "energy_weights": [1.0, 0.01],
         # 训练：无动量
-        "lr": 10.0,
+        "lr": 1.0,
         "steps": 300,
         "lambda_reg": 0.0,
         "relax": False,
