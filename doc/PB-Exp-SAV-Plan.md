@@ -1,6 +1,12 @@
 # PB-Exp-SAV Plan
 
-## 定义
+下文朴素方案对应 [PB Naive ESAV](../optimizer/pb_naive_esav.py)。
+当前 [PB-ESAV](../optimizer/pb_esav.py) 使用本文件“带Hessian信息的PB-ESAV”中的指数辅助变量方案，实验结果见
+[非线性实验报告](Nonlinear-Experiments-Plan.md)。
+
+## 符号约定
+
+以下约定用于朴素方案；带 Hessian 信息的方案在对应章节重新定义局部辅助变量。
 
 $$
 E(\boldsymbol{\theta})=\sum_i E_i(\boldsymbol{\theta}),
@@ -25,7 +31,7 @@ r^{n+1}=\prod_i r_i^{n+1},
 $$
 
 
-## 推导离散形式
+## 从PBSAV推导的朴素PB-ESAV离散形式
 
 从Modified 对数导数出发：
 $$
@@ -110,7 +116,7 @@ $$
 \end{aligned}
 $$
 
-## Plan 1：单一辅助变量思路
+### Plan 1：单一辅助变量思路
 
 在驱动项和修正项中，统一使用总能量比值：
 
@@ -152,7 +158,7 @@ $$
 
 只保存总辅助变量，不演化局部辅助变量。
 
-## Plan 2：整体驱动＋局部修正思路
+### Plan 2：整体驱动＋局部修正思路
 
 仅在驱动项中使用总能量比值；修正矩阵保留局部比值：
 
@@ -188,7 +194,7 @@ r_i^{n+1}
 }
 $$
 
-## Modified能量耗散
+### Modified能量耗散
 
 指数更新保持辅助变量正性。两个方案均满足：
 
@@ -215,164 +221,465 @@ $$
 }
 $$
 
-![comparison](/Users/phoenizard/Workplace/NumericalScheme/results/quadratic/comparison.png)
+## Hessian信息分析
 
+### 问题发现
 
+在执行非线性优化问题中，尝试用GD+Armijo策略拟合sin函数，我们发现PB-SAV拟合顺利，但是上面的朴素PB-ESAV方案无法收敛拟合。背后的原因是PB-SAV实际上在设计的时候吸收了部分Hessian的信息。回忆牛顿法之所以使用Hessian矩阵，是因为Hessian矩阵的曲率信息暗示了哪个方向的梯度分量是需要被放大或者缩小的。
 
-
-
-下面是AI写的，我还没check
-
-## Relaxed 扩展：对数辅助变量修正
-
-以下为在原方案之后增加的 relaxation 步骤，不改变给定旧状态下的参数增量。记 $\ell=\ln r$、$\ell_i=\ln r_i$。临时更新使用波浪号，最终状态使用$n+1$；Plan 1 只保存 $\ell$，Plan 2 同时保存 $\ell_i$。实现只保存对数，通过差值的指数计算比值，不直接计算 $\exp(E)$ 或 $r$。
-
-### Plan 1：受耗散预算约束的一致性修正
-
-定义 $d^n=E(\theta^n)-\ell^n$。对于 Hessian 为 $H$ 的 quadratic，原步骤满足：
+具体地，考虑 $\boldsymbol{\theta}$ 为当前状态，$\Delta\boldsymbol{\theta}$ 为参数增量。假设目标函数 $F$ 二阶连续可微，根据二阶 Taylor 展开，有：
 
 $$
-E(\theta^{n+1})-\widetilde\ell^{n+1}
-=d^n+\frac12(\Delta\theta^n)^\top H\Delta\theta^n.
+F(\boldsymbol{\theta}+\Delta\boldsymbol{\theta})
+=F(\boldsymbol{\theta})
++\mathbf g^\top\Delta\boldsymbol{\theta}
++\frac12\Delta\boldsymbol{\theta}^\top\mathbf H\Delta\boldsymbol{\theta}
++o\!\left(\|\Delta\boldsymbol{\theta}\|^2\right).
 $$
 
-即使初始一致，凸二次问题的离散更新也会累积偏差，并通过比值$\exp(-d^n)$ 影响后续迭代。固定已经计算出的 $\theta^{n+1}$，取$D_n=\ell^n-\widetilde\ell^{n+1}\ge0$，解标量约束问题：
+其中，$\mathbf g=\boldsymbol{\nabla}_{\boldsymbol{\theta}}F(\boldsymbol{\theta})$ 是梯度向量，$\mathbf H=\boldsymbol{\nabla}_{\boldsymbol{\theta}}^2F(\boldsymbol{\theta})$ 是黑塞矩阵。忽略泰勒展开的余项，牛顿法选择使上述二次模型最小的参数增量。当 $\mathbf H$ 正定时，对该模型关于 $\Delta\boldsymbol{\theta}$ 求梯度并令其为零，得到
 
 $$
-\min_\ell |\ell-E^{n+1}|^2,
-\qquad \ell-\widetilde\ell^{n+1}\le\eta D_n,
-\qquad 0\le\eta\le1.
+\mathbf g+\mathbf H\Delta\boldsymbol{\theta}=\mathbf 0
+\quad\Longrightarrow\quad
+\boxed{\Delta\boldsymbol{\theta}=-\mathbf H^{-1}\mathbf g}.
 $$
 
-其解为 $\ell^{n+1}=\min(E^{n+1},\widetilde\ell^{n+1}+\eta D_n)$。$\eta$ 是允许回补的耗散比例，不是局部变量的混合系数。默认 $\eta=1$ 保持旧 Plan 1 行为；$\eta<1$ 保留部分耗散。本次只为 Plan 1 开放可调 $\eta$，Plan 2 保留原有全预算规则。
+因此，更新量不仅取决于梯度，也取决于曲率：**在黑塞矩阵的特征方向上，同样大小的梯度分量，曲率越大，对应的位移越小；曲率越小，对应的位移越大。** 这就是我们考虑黑塞信息的原因：用曲率确定各方向上合适的更新幅度。
 
-### 初始化（循环外执行一次）
-
-给定 $\theta^0$，计算各分量能量并初始化：
+对上面的 PB Naive ESAV，将总目标统一记为 $F$，令 $\eta=\Delta t$、$\alpha=r^n/\exp(F(\boldsymbol{\theta}^n))$，并省略当前步的上标。参数更新方程可以逐步整理为
 
 $$
-E^0=\sum_i E_i(\theta^0),\qquad
-\ell^0=E^0,\qquad
-\ell_i^0=E_i(\theta^0)\quad\text{（仅 Plan 2）}.
-$$
-
-记录 epoch 0。PB-Exp-SAV 不需要正能量 shift。
-
-### 每次 Loop：从 epoch $n$ 到 $n+1$
-
-**1. 计算旧参数处的能量和梯度。**
-
-$$
-E_i^n=E_i(\theta^n),\qquad g_i^n=\nabla E_i(\theta^n),\qquad
-E^n=\sum_iE_i^n,\qquad g^n=\sum_i g_i^n.
-$$
-
-**2. 计算驱动比值和修正矩阵的权重。**
-
-$$
-a^n=\exp(\ell^n-E^n),\qquad
-w_i^n=\begin{cases}
-a^n,&\text{Plan 1},\\
-\exp(\ell_i^n-E_i^n),&\text{Plan 2}.
-\end{cases}
+\begin{aligned}
+\frac{\Delta\boldsymbol{\theta}}{\eta}
+&=-\alpha\mathbf g-\mathbf B\Delta\boldsymbol{\theta},\\
+(\mathbf I+\eta\mathbf B)\Delta\boldsymbol{\theta}
+&=-\eta\alpha\mathbf g.
+\end{aligned}
 $$
 
 $$
-B^n=\sum_iw_i^n g_i^n(g_i^n)^\top=V^n(V^n)^\top,
-\qquad V^n=[\sqrt{w_1^n}g_1^n,\ldots,\sqrt{w_m^n}g_m^n].
+\boxed{\Delta\boldsymbol{\theta}
+=-\eta\alpha(\mathbf I+\eta\mathbf B)^{-1}\mathbf g.}
 $$
 
-**3. 求解参数增量并更新参数。**
+这里 $\mathbf B$ 半正定、$\eta>0$，所以 $\mathbf I+\eta\mathbf B$ 正定，可以求逆。PB-SAV 的更新也具有相同形式，区别在于辅助变量比值 $\alpha$ 和矩阵 $\mathbf B$ 的具体定义。因此，接下来需要展开两种方法的 $\mathbf B$，与目标函数的黑塞矩阵 $\mathbf H$ 对照。
+
+对于当前 MSE 实验，限定 **$M=N=30$，每个样本对应一个能量分量**。以下求导均针对 $\boldsymbol{\theta}$。
+
+当前目标函数及分量梯度为
 
 $$
-(I+\Delta t B^n)\Delta\theta^n=-\Delta t\,a^n g^n=:b^n,
-\qquad \theta^{n+1}=\theta^n+\Delta\theta^n.
-$$
-
-实现使用分量数 $m$ 维的低秩求解，不构造参数维度的稠密矩阵：
-
-$$
-\Delta\theta^n=b^n-\Delta t\,V^n
-\left(I_m+\Delta t(V^n)^\top V^n\right)^{-1}(V^n)^\top b^n.
-$$
-
-这里的逆通过线性求解计算，不显式求逆。
-
-**4. 用旧梯度计算临时辅助变量。**
-
-$$
-\widetilde\ell^{n+1}=\ell^n+(g^n)^\top\Delta\theta^n,
+F(\boldsymbol{\theta})=\sum_{i=1}^{N}E_i(\boldsymbol{\theta}),
 \qquad
-\widetilde\ell_i^{n+1}=\ell_i^n+(g_i^n)^\top\Delta\theta^n
-\quad\text{（仅 Plan 2）}.
+E_i(\boldsymbol{\theta})
+=\frac{\bigl(f_{\boldsymbol{\theta}}(x_i)-y_i\bigr)^2}{2N},
 $$
 
-未启用 relaxation 时，直接接受这些临时值，然后执行步骤 6。
+$$
+\boldsymbol{\nabla}E_i
+=\frac{f_{\boldsymbol{\theta}}(x_i)-y_i}{N}
+\,\boldsymbol{\nabla}f_{\boldsymbol{\theta}}(x_i).
+$$
 
-**5. 启用 relaxation 时，计算新参数处的能量并修正辅助变量。**
-
-重新计算 $E_i^{n+1}=E_i(\theta^{n+1})$ 和 $E^{n+1}=\sum_iE_i^{n+1}$，
-此步骤不重新计算梯度。
-
-Plan 1 先计算耗散及允许上限，再修正总对数辅助变量：
+再求一次导数，得到**严格的黑塞矩阵**：
 
 $$
-D_n=\ell^n-\widetilde\ell^{n+1},\qquad
-U_n=\widetilde\ell^{n+1}+\eta D_n,
+\boxed{
+\begin{aligned}
+\mathbf H
+={}&\underbrace{\frac1N\sum_i
+\boldsymbol{\nabla}f_{\boldsymbol{\theta}}(x_i)
+\bigl(\boldsymbol{\nabla}f_{\boldsymbol{\theta}}(x_i)\bigr)^\top
+}_{\text{第一项：输出梯度的外积}}\\
+&+\underbrace{\frac1N\sum_i
+\bigl(f_{\boldsymbol{\theta}}(x_i)-y_i\bigr)
+\boldsymbol{\nabla}^{2}f_{\boldsymbol{\theta}}(x_i)
+}_{\text{第二项：残差乘以输出的二阶导数}}.
+\end{aligned}
+}
+$$
+
+PB-SAV 的矩阵展开为
+
+$$
+\begin{aligned}
+\mathbf B_{\mathrm{SAV}}
+&=\sum_i
+\frac{\boldsymbol{\nabla}E_i
+(\boldsymbol{\nabla}E_i)^\top}
+{2(E_i+C/N)}\\
+&=\frac1N\sum_i
+\underbrace{
+\frac{\bigl(f_{\boldsymbol{\theta}}(x_i)-y_i\bigr)^2}
+{\bigl(f_{\boldsymbol{\theta}}(x_i)-y_i\bigr)^2+2C}
+}_{\displaystyle \text{残差平方远大于 }2C\text{ 时接近 }1}
+\boldsymbol{\nabla}f_{\boldsymbol{\theta}}(x_i)
+\bigl(\boldsymbol{\nabla}f_{\boldsymbol{\theta}}(x_i)\bigr)^\top.
+\end{aligned}
+$$
+
+**分子中的残差平方，被分母中的残差平方抵消了。** 当 $C=0$ 且各残差非零时，它恰好等于 $\mathbf H$ 的第一项；实际使用 $C=10^{-10}$ 时，在残差平方远大于 $2C$ 的范围内近似保留这一项。
+
+PB Naive ESAV Plan 1 的矩阵则为
+
+$$
+\begin{aligned}
+\mathbf B_{\mathrm{Naive}}
+&=\alpha\sum_i
+\boldsymbol{\nabla}E_i(\boldsymbol{\nabla}E_i)^\top\\
+&=\frac{\alpha}{N}\sum_i
+\underbrace{
+\frac{\bigl(f_{\boldsymbol{\theta}}(x_i)-y_i\bigr)^2}{N}
+}_{\text{额外的残差平方权重}}
+\boldsymbol{\nabla}f_{\boldsymbol{\theta}}(x_i)
+\bigl(\boldsymbol{\nabla}f_{\boldsymbol{\theta}}(x_i)\bigr)^\top.
+\end{aligned}
+$$
+
+这里没有对应的分母来抵消残差平方。因此，**即使黑塞第一项中的输出梯度外积仍然显著，残差减小也会使它在 $\mathbf B$ 中的权重趋向零**（辅助变量比值有界时）。Plan 2 将总比值 $\alpha$ 换为各分量的 $r_i/\exp(E_i)$，同样保留了这层残差平方权重。这就是朴素 ESAV 随残差减小而削弱曲率信息的原因。
+
+### 带Hessian信息的PB-ESAV
+
+沿用 $E=F=\sum_iE_i$。设各分量光滑，且在所考虑的区域内
+
+$$
+E_i(\boldsymbol{\theta})+C/M>0,
+\qquad C\ge0,
 \qquad
-\boxed{\ell^{n+1}=\min(E^{n+1},U_n).}
+\Delta\boldsymbol{\theta}
+=\boldsymbol{\theta}^{n+1}-\boldsymbol{\theta}^n,
+\qquad \Delta t>0.
 $$
 
-当 $\eta=1$ 时，实现直接取 $U_n=\ell^n$，保持旧版本的浮点运算路径。当 $\eta=0$ 时不允许向上回补；对当前凸 quadratic，这与未松弛更新一致。当 $D_n=0$ 时仍可直接使用上述公式，无需除法或额外小量。
-
-Plan 2 保留原规则，不接受可调 $\eta$，对所有分量使用同一个混合系数：
+本节重新定义局部辅助变量，总辅助变量保持不变：
 
 $$
-\xi=\begin{cases}
-0,&E^{n+1}\le\ell^n,\\[4pt]
-\dfrac{E^{n+1}-\ell^n}{E^{n+1}-\widetilde\ell^{n+1}},
-&E^{n+1}>\ell^n.
-\end{cases}
+\boxed{
+r=\exp(E(\boldsymbol{\theta})),
+\qquad
+r_i=\exp\!\left[
+E_i(\boldsymbol{\theta})
++\frac12\ln\!\bigl(E_i(\boldsymbol{\theta})+C/M\bigr)
+\right].
+}
+$$
+
+因此 $r_i=\exp(E_i)\sqrt{E_i+C/M}$；不再要求 $r=\prod_i r_i$。按上述定义在 $\boldsymbol{\theta}^0$ 处初始化 $r^0$、$r_i^0$。
+
+**连续参数方程与对数导数**
+
+$$
+\frac{d\boldsymbol{\theta}}{dt}
+=-\sum_i
+\frac{r_i}{
+\exp\!\left[E_i(\boldsymbol{\theta})
++\frac12\ln(E_i(\boldsymbol{\theta})+C/M)\right]}
+\boldsymbol{\nabla}E_i(\boldsymbol{\theta}),
+$$
+
+$$
+\frac{1}{r_i}\frac{dr_i}{dt}
+=\frac{d\ln r_i}{dt}
+=\left(1+\frac{1}{2(E_i(\boldsymbol{\theta})+C/M)}\right)
+\boldsymbol{\nabla}E_i(\boldsymbol{\theta})^\top
+\frac{d\boldsymbol{\theta}}{dt},
+$$
+
+$$
+\frac{1}{r}\frac{dr}{dt}
+=\frac{d\ln r}{dt}
+=\boldsymbol{\nabla}E(\boldsymbol{\theta})^\top
+\frac{d\boldsymbol{\theta}}{dt}.
+$$
+
+由链式法则，
+
+$$
+\frac{d}{dt}\left[
+\ln r_i-E_i(\boldsymbol{\theta})
+-\frac12\ln(E_i(\boldsymbol{\theta})+C/M)
+\right]=0,
+\qquad
+\frac{d}{dt}\left[\ln r-E(\boldsymbol{\theta})\right]=0.
+$$
+
+一致初始化下，各辅助变量比值恒为 $1$，连续方程恢复为
+
+$$
+\frac{d\boldsymbol{\theta}}{dt}
+=-\boldsymbol{\nabla}E(\boldsymbol{\theta}),
+\qquad
+\frac{d\ln r}{dt}
+=-\|\boldsymbol{\nabla}E(\boldsymbol{\theta})\|^2\le0.
+$$
+
+离散式中记 $E_i^n=E_i(\boldsymbol{\theta}^n)$、$E^n=E(\boldsymbol{\theta}^n)$，梯度均在 $\boldsymbol{\theta}^n$ 处计算。
+
+**（1）局部辅助变量更新**
+
+以当前步的系数和梯度离散对数导数：
+
+$$
+\ln r_i^{n+1}-\ln r_i^n
+=\left(1+\frac{1}{2(E_i^n+C/M)}\right)
+(\boldsymbol{\nabla}E_i^n)^\top\Delta\boldsymbol{\theta}.
 $$
 
 $$
 \boxed{
-\ell_i^{n+1}=\xi\widetilde\ell_i^{n+1}+(1-\xi)E_i^{n+1},
-\qquad \ell^{n+1}=\sum_i\ell_i^{n+1}.
+r_i^{n+1}
+=r_i^n\exp\!\left[
+\left(1+\frac{1}{2(E_i^n+C/M)}\right)
+(\boldsymbol{\nabla}E_i^n)^\top\Delta\boldsymbol{\theta}
+\right].
 }
 $$
 
-实现中用局部临时值之和计算 Plan 2 的 $\widetilde\ell^{n+1}$，使混合公式与局部求和采用同一数值。先判断分支：当 $E^{n+1}\le\ell^n$ 时直接令$\ell_i^{n+1}=E_i^{n+1}$，无需计算除法，也无需给分母添加小量。另一分支由 $\widetilde\ell^{n+1}\le\ell^n<E^{n+1}$ 得到正分母与$0\le\xi\le1$。零梯度且辅助变量与能量一致时进入第一分支，状态不变。
-
-**6. 保存最终状态并记录 epoch $n+1$。**
-
-保存 $\theta^{n+1}$、$\ell^{n+1}$，以及 Plan 2 的 $\ell_i^{n+1}$。记录总能量、分量能量、修正能量 $\ell^{n+1}$ 和$\exp(\ell^{n+1}-E^{n+1})$；Plan 2 另记录局部对数与$\exp(\ell_i^{n+1}-E_i^{n+1})$。所有字段对应同一步的最终状态，不能混用临时辅助变量或旧参数处的能量。
-
-### Relaxation 后的性质
-
-原方案的耗散等式适用于临时更新：
+**（2）总辅助变量更新**
 
 $$
-\widetilde\ell^{n+1}-\ell^n
-=-\frac{1}{a^n}\left[
-\frac{\|\Delta\theta^n\|^2}{\Delta t}
-+(\Delta\theta^n)^\top B^n\Delta\theta^n\right]\le0.
+\ln r^{n+1}-\ln r^n
+=(\boldsymbol{\nabla}E^n)^\top\Delta\boldsymbol{\theta},
 $$
-
-Plan 1 在精确算术下满足：
 
 $$
 \boxed{
-\ell^{n+1}-\ell^n\le-(1-\eta)D_n\le0.
+r^{n+1}
+=r^n\exp\!\left[
+(\boldsymbol{\nabla}E^n)^\top\Delta\boldsymbol{\theta}
+\right].
 }
 $$
 
-当 $E^{n+1}\le U_n$ 时完全恢复一致性，否则取耗散预算允许的上限 $U_n$。该约束既限制回补幅度，也保证至少保留 $(1-\eta)D_n$ 的耗散。
+**（3）代入辅助变量，再展开指数**
 
-Plan 2 的共同混合系数保持 $\ell^{n+1}=\sum_i\ell_i^{n+1}$，即$r^{n+1}=\prod_i r_i^{n+1}$；其旧规则仍满足：
+参数方程使用下一步的局部辅助变量：
 
 $$
-\boxed{\ell^{n+1}=\min(E^{n+1},\ell^n)\le\ell^n.}
+\frac{\Delta\boldsymbol{\theta}}{\Delta t}
+=-\sum_i
+\frac{r_i^{n+1}}{
+\exp\!\left[E_i^n+\frac12\ln(E_i^n+C/M)\right]}
+\boldsymbol{\nabla}E_i^n.
 $$
 
-Plan 2 当 $E^{n+1}\le\ell^n$ 时完全恢复一致性，否则维持旧的总修正能量。两种方案的浮点计算均允许舍入误差。最终 relaxed 状态一般不再满足原耗散等式，而满足各自的上述不等式；这些结论不保证真实能量 $E^{n+1}\le E^n$，也不要求 Plan 2 的每个局部辅助变量单调。
+代入（1），得到含待求增量的指数形式：
+
+$$
+\boxed{
+\frac{\Delta\boldsymbol{\theta}}{\Delta t}
+=-\sum_i
+\frac{r_i^n}{
+\exp\!\left[E_i^n+\frac12\ln(E_i^n+C/M)\right]}
+\exp\!\left[
+\left(1+\frac{1}{2(E_i^n+C/M)}\right)
+(\boldsymbol{\nabla}E_i^n)^\top\Delta\boldsymbol{\theta}
+\right]
+\boldsymbol{\nabla}E_i^n.
+}
+$$
+
+对其中的指数作一阶 Taylor 展开：
+
+$$
+\exp\!\left[
+\left(1+\frac{1}{2(E_i^n+C/M)}\right)
+(\boldsymbol{\nabla}E_i^n)^\top\Delta\boldsymbol{\theta}
+\right]
+\approx
+1+\left(1+\frac{1}{2(E_i^n+C/M)}\right)
+(\boldsymbol{\nabla}E_i^n)^\top\Delta\boldsymbol{\theta}.
+$$
+
+由此构造线性化参数更新式：
+
+$$
+\begin{aligned}
+\frac{\Delta\boldsymbol{\theta}}{\Delta t}
+={}&-\sum_i
+\frac{r_i^n}{
+\exp\!\left[E_i^n+\frac12\ln(E_i^n+C/M)\right]}
+\boldsymbol{\nabla}E_i^n\\
+&-\left[
+\sum_i
+\frac{r_i^n}{
+\exp\!\left[E_i^n+\frac12\ln(E_i^n+C/M)\right]}
+\left(1+\frac{1}{2(E_i^n+C/M)}\right)
+\boldsymbol{\nabla}E_i^n(\boldsymbol{\nabla}E_i^n)^\top
+\right]\Delta\boldsymbol{\theta}.
+\end{aligned}
+$$
+
+分母 $2(E_i^n+C/M)$ 来自辅助变量中的 $\frac12\ln(E_i+C/M)$ 的导数，再通过指数的一阶展开进入修正矩阵。
+
+#### Plan 1：单一辅助变量思路
+
+沿用朴素方案的 PB 构造，在驱动项和修正项中作比值替换：
+
+$$
+\frac{r_i^n}{
+\exp\!\left[E_i^n+\frac12\ln(E_i^n+C/M)\right]}
+\quad\longrightarrow\quad
+\frac{r^n}{\exp(E^n)}.
+$$
+
+这是方案的构造步骤，不是离散辅助变量之间的恒等关系。
+
+**Scheme**
+
+$$
+\boxed{
+\mathbf B^n
+=\frac{r^n}{\exp(E^n)}
+\sum_i
+\left(1+\frac{1}{2(E_i^n+C/M)}\right)
+\boldsymbol{\nabla}E_i^n(\boldsymbol{\nabla}E_i^n)^\top.
+}
+$$
+
+$$
+\boxed{
+\frac{\Delta\boldsymbol{\theta}}{\Delta t}
+=-\frac{r^n}{\exp(E^n)}
+\boldsymbol{\nabla}E^n
+-\mathbf B^n\Delta\boldsymbol{\theta}.
+}
+$$
+
+$$
+\boxed{
+r^{n+1}
+=r^n\exp\!\left[
+(\boldsymbol{\nabla}E^n)^\top\Delta\boldsymbol{\theta}
+\right].
+}
+$$
+
+只保存并演化总辅助变量 $r$；局部辅助变量仅用于上述构造推导。
+
+#### Plan 2：整体驱动＋局部修正思路
+
+仅在驱动项中作上述比值替换；修正矩阵保留局部比值。
+
+**Scheme**
+
+$$
+\boxed{
+\mathbf B^n
+=\sum_i
+\frac{r_i^n}{
+\exp\!\left[E_i^n+\frac12\ln(E_i^n+C/M)\right]}
+\left(1+\frac{1}{2(E_i^n+C/M)}\right)
+\boldsymbol{\nabla}E_i^n(\boldsymbol{\nabla}E_i^n)^\top.
+}
+$$
+
+$$
+\boxed{
+\frac{\Delta\boldsymbol{\theta}}{\Delta t}
+=-\frac{r^n}{\exp(E^n)}
+\boldsymbol{\nabla}E^n
+-\mathbf B^n\Delta\boldsymbol{\theta}.
+}
+$$
+
+$$
+\boxed{
+r^{n+1}
+=r^n\exp\!\left[
+(\boldsymbol{\nabla}E^n)^\top\Delta\boldsymbol{\theta}
+\right].
+}
+$$
+
+$$
+\boxed{
+r_i^{n+1}
+=r_i^n\exp\!\left[
+\left(1+\frac{1}{2(E_i^n+C/M)}\right)
+(\boldsymbol{\nabla}E_i^n)^\top\Delta\boldsymbol{\theta}
+\right].
+}
+$$
+
+总辅助变量与局部辅助变量分别递推，不使用乘积关系。
+
+#### Modified能量耗散
+
+由一致初始化、指数更新及 $E_i^n+C/M>0$，
+
+$$
+r^n>0,
+\qquad r_i^n>0\ \text{（Plan 2）},
+\qquad \mathbf B^n\succeq\mathbf 0,
+\qquad
+\mathbf I+\Delta t\,\mathbf B^n\succ\mathbf 0.
+$$
+
+因此参数更新可唯一求解。与 $\Delta\boldsymbol{\theta}$ 作内积：
+
+$$
+\frac{\|\Delta\boldsymbol{\theta}\|^2}{\Delta t}
+=-\frac{r^n}{\exp(E^n)}
+(\boldsymbol{\nabla}E^n)^\top\Delta\boldsymbol{\theta}
+-\Delta\boldsymbol{\theta}^\top\mathbf B^n\Delta\boldsymbol{\theta}.
+$$
+
+结合总辅助变量的对数更新，两个 Plan 均满足
+
+$$
+\boxed{
+\begin{aligned}
+\ln r^{n+1}-\ln r^n
+&=(\boldsymbol{\nabla}E^n)^\top\Delta\boldsymbol{\theta}\\
+&=-\frac{\exp(E^n)}{r^n}
+\left[
+\frac{\|\Delta\boldsymbol{\theta}\|^2}{\Delta t}
++\Delta\boldsymbol{\theta}^\top\mathbf B^n\Delta\boldsymbol{\theta}
+\right]
+\le0.
+\end{aligned}
+}
+$$
+
+耗散量为总修正能量 $\ln r$，证明不依赖 $r=\prod_i r_i$。
+
+#### 与PB-SAV曲率项的对应
+
+Plan 1 的修正矩阵可直接拆为
+
+$$
+\boxed{
+\frac{\exp(E^n)}{r^n}\mathbf B^n
+=
+\underbrace{
+\sum_i\boldsymbol{\nabla}E_i^n(\boldsymbol{\nabla}E_i^n)^\top
+}_{\text{朴素 ESAV 的外积项}}
++
+\underbrace{
+\sum_i\frac{
+\boldsymbol{\nabla}E_i^n(\boldsymbol{\nabla}E_i^n)^\top
+}{2(E_i^n+C/M)}
+}_{\text{PB-SAV 的归一化外积项}}.
+}
+$$
+
+对上文的 MSE、$M=N$，省略当前步上标，沿用 $\alpha=r^n/\exp(E^n)$：
+
+$$
+\frac{\mathbf B}{\alpha}
+=\frac1N\sum_i
+\left[
+\frac{\bigl(f_{\boldsymbol{\theta}}(x_i)-y_i\bigr)^2}{N}
++
+\frac{\bigl(f_{\boldsymbol{\theta}}(x_i)-y_i\bigr)^2}{
+\bigl(f_{\boldsymbol{\theta}}(x_i)-y_i\bigr)^2+2C}
+\right]
+\boldsymbol{\nabla}f_{\boldsymbol{\theta}}(x_i)
+\bigl(\boldsymbol{\nabla}f_{\boldsymbol{\theta}}(x_i)\bigr)^\top.
+$$
+
+其中第二项与 PB-SAV 相同：残差平方远大于 $2C$ 时，近似保留黑塞矩阵的第一项。Plan 2 保留相同的两项结构，但各分量另带各自的局部辅助变量比值。
+
+对一般能量，本方案得到的是与 PB-SAV 相同的归一化外积结构；其与黑塞矩阵的具体对应取决于能量形式。
