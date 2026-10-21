@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 
 def load_experiment(input_dir):
     input_dir = Path(input_dir)
-    config = json.loads((input_dir / "config.json").read_text())
-    with (input_dir / "history.csv").open(newline="") as file:
+    config = json.loads((input_dir / "config.json").read_text(encoding="utf-8"))
+    with (input_dir / "history.csv").open(newline="", encoding="utf-8") as file:
         rows = list(csv.DictReader(file))
     if not rows:
         raise ValueError("The experiment history is empty")
@@ -33,6 +33,8 @@ def step_label(config):
 
 def esav_label(config):
     """Distinguish current, naive, and historical diagnostic ESAV records."""
+    if config["method"] == "esav":
+        return "ESAV (linearized r)" if config.get("linearized") else "ESAV"
     variant = config.get("esav_variant")
     diagnostic = config.get("debug_curvature", "")
     if variant == "exp_log_energy":
@@ -49,19 +51,20 @@ def esav_label(config):
 
 def plot_experiment(input_dir, output):
     config, rows = load_experiment(input_dir)
-    if config["method"] == "gd":
-        return plot_training_curves([input_dir], output)
+    if config["method"] in ("gd", "sgd", "adamw"):
+        return plot_comparison([input_dir], output)
     iterations = [int(row["iteration"]) for row in rows]
     objectives = [float(row["objective"]) for row in rows]
-    modified = [float(row["modified_energy"]) for row in rows]
+    modified_key = "r" if config.get("linearized") else "modified_energy"
+    modified = [float(row[modified_key]) for row in rows]
     method = config["method"]
-    if method in ("pb_esav", "pb_naive_esav"):
+    if method in ("esav", "pb_esav", "pb_naive_esav"):
         label = esav_label(config)
         if config.get("relax", False):
             label += " (relaxed)"
             if config["scheme"] == "plan1":
                 label += f", eta = {config.get('eta', 1.0):g}"
-        modified_label = r"$\log r^n$"
+        modified_label = r"$r^n$" if config.get("linearized") else r"$\log r^n$"
     elif method in ("sav", "pb_sav"):
         label = "SAV" if method == "sav" else "PB-SAV"
         if config.get("relax", False):
@@ -76,7 +79,8 @@ def plot_experiment(input_dir, output):
                      color="#3568a8", linewidth=1.8)
     axes[0].set(title="Objective energy", ylabel=r"$E(x^n)$")
     axes[1].plot(iterations, modified, color="#d16a2c", linewidth=1.8)
-    axes[1].set(title="Modified energy", ylabel=modified_label)
+    axes[1].set(title="Auxiliary variable" if config.get("linearized") else "Modified energy",
+                ylabel=modified_label)
     for axis in axes:
         axis.set_xlabel("Iteration (epoch)")
         axis.grid(True, alpha=0.2)
@@ -91,7 +95,7 @@ def plot_experiment(input_dir, output):
 
 def plot_comparison(input_dirs, output):
     experiments = [load_experiment(path) for path in input_dirs]
-    if any(config["method"] == "gd" for config, _ in experiments):
+    if any(config["problem"] == "nonlinear_regression" for config, _ in experiments):
         return plot_training_curves(input_dirs, output)
     reference = experiments[0][0]
     shared = ("problem", "dimension", "initial_value", "device", "dtype",
@@ -100,17 +104,44 @@ def plot_comparison(input_dirs, output):
         if any(config.get(key) != reference.get(key) for key in shared):
             raise ValueError("Comparison requires matching problem and experiment settings")
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5.2), layout="constrained")
+    has_auxiliary = any("r_over_exp_E" in rows[0] or "q_over_Q" in rows[0]
+                        for _, rows in experiments)
+    fig, axes = plt.subplots(1, 2 if has_auxiliary else 1, figsize=(14, 6.2),
+                             layout="constrained", squeeze=False)
+    axes = axes[0]
     shifts = set()
     has_esav = False
+    signed_ratio = False
     for config, rows in experiments:
         method = config["method"]
         marker = None
-        if method in ("pb_esav", "pb_naive_esav"):
+        marker_start = 15
+        linewidth = 1.9
+        if method in ("gd", "sgd", "adamw"):
+            label = {"gd": "GD", "sgd": "SGD", "adamw": "AdamW"}[method]
+            color = "#222222" if method != "adamw" else "#a6761d"
+            style = "-"
+            marker = "o" if method != "adamw" else "P"
+            marker_start = 10 if method != "adamw" else 30
+            linewidth = 2.4 if method != "adamw" else 1.6
+            ratio_key = None
+        elif method == "esav":
+            label = esav_label(config)
+            color = "#b3448c" if config.get("linearized") else "#d55e00"
+            style = ":" if config.get("linearized") else "--"
+            marker = "v" if config.get("linearized") else "^"
+            marker_start = 20 if config.get("linearized") else 30
+            ratio_key = "r_over_exp_E"
+            has_esav = True
+        elif method in ("pb_esav", "pb_naive_esav"):
             scheme = config["scheme"]
             label = esav_label(config)
-            color, style = {"plan1": ("#218c60", "-."),
-                            "plan2": ("#8953b1", ":")}[scheme]
+            color, style, marker = {
+                "plan1": ("#009e73", "-", "d"),
+                "plan2": ("#6a3d9a", "--", "x"),
+            }[scheme]
+            marker_start = 10 if scheme == "plan1" else 30
+            linewidth = 2.4 if scheme == "plan1" else 1.7
             if config.get("relax", False):
                 label = "relaxed " + label
                 style = "-"
@@ -125,8 +156,9 @@ def plot_comparison(input_dirs, output):
             has_esav = True
         elif method in ("sav", "pb_sav"):
             label = "SAV" if method == "sav" else f"rank-{config['components']} PB-SAV"
-            color = "#3568a8" if method == "sav" else "#d16a2c"
+            color = "#0072b2" if method == "sav" else "#d16a2c"
             style = "-" if config.get("relax", False) else "--"
+            marker = "s" if method == "sav" else "P"
             if config.get("relax", False):
                 label = "relaxed " + label
             ratio_key = "q_over_Q"
@@ -135,25 +167,33 @@ def plot_comparison(input_dirs, output):
             raise ValueError(f"Unsupported method in experiment config: {method}")
         iterations = [int(row["iteration"]) for row in rows]
         objectives = [float(row["objective"]) for row in rows]
-        ratios = [float(row[ratio_key]) for row in rows]
         axes[0].semilogy(iterations, [v if v > 0 else float("nan") for v in objectives],
-                         color=color, linestyle=style, linewidth=1.7, label=label,
-                         marker=marker, markevery=30, markersize=4)
-        axes[1].plot(iterations, ratios, color=color, linestyle=style, linewidth=1.7,
-                     marker=marker, markevery=30, markersize=4)
+                         color=color, linestyle=style, linewidth=linewidth, label=label,
+                         marker=marker, markevery=(marker_start, 40), markersize=6,
+                         markerfacecolor="white", markeredgewidth=1.5)
+        if ratio_key is not None:
+            ratios = [float(row[ratio_key]) for row in rows]
+            signed_ratio |= any(value < 0 for value in ratios)
+            axes[1].plot(iterations, ratios, color=color, linestyle=style, linewidth=linewidth,
+                         marker=marker, markevery=(marker_start, 40), markersize=6,
+                         markerfacecolor="white", markeredgewidth=1.5)
 
-    axes[0].axhline(1e-10, color="#888888", linestyle=":", linewidth=1)
     axes[0].set(title="Objective energy", ylabel=r"$E(x^n)$")
     ratio_label = (r"$q^n/Q(x^n)$ (SAV/PB-SAV)" if shifts else "")
     if has_esav:
         ratio_label += ("\n" if ratio_label else "") + r"$r^n/\exp(E(x^n))$ (ESAV)"
-    axes[1].set(title="Auxiliary-variable ratio", ylabel=ratio_label)
+    if has_auxiliary:
+        axes[1].set(title="Auxiliary-variable ratio", ylabel=ratio_label)
+        if signed_ratio:
+            axes[1].set_yscale("symlog", linthresh=1e-3)
+            axes[1].set_title("Auxiliary-variable ratio (symlog)")
     for axis in axes:
         axis.set_xlabel("Iteration (epoch)")
         axis.grid(True, alpha=0.2)
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside lower center", ncol=3,
-               fontsize=10, frameon=False)
+               fontsize=11, frameon=False, handlelength=5, numpoints=2,
+               columnspacing=2, labelspacing=0.8)
     shift_note = ""
     if shifts:
         shift_note = "SAV/PB-SAV shift = " + ", ".join(f"{v:g}" for v in sorted(shifts))
@@ -174,6 +214,9 @@ def plot_training_curves(input_dirs, output):
     experiments = [load_experiment(path) for path in input_dirs]
     styles = {
         ("gd", None): ("GD", "#333333", "-.", None),
+        ("sgd", None): ("SGD", "#333333", "-.", None),
+        ("adamw", None): ("AdamW", "#007c91", "-", None),
+        ("esav", None): ("ESAV", "#d89b00", "-", None),
         ("pb_sav", None): ("PB-SAV", "#3568a8", "-", None),
         ("pb_esav", "plan1"): ("PB-ESAV Plan 1", "#d16a2c", "--", None),
         ("pb_esav", "plan2"): ("PB-ESAV Plan 2", "#218c60", ":", "o"),
@@ -186,8 +229,10 @@ def plot_training_curves(input_dirs, output):
         if style_method == "pb_esav" and esav_label(config).startswith("PB Naive ESAV"):
             style_method = "pb_naive_esav"
         label, color, style, marker = styles[(style_method, config.get("scheme"))]
-        if config["method"] in ("pb_esav", "pb_naive_esav"):
+        if config["method"] in ("esav", "pb_esav", "pb_naive_esav"):
             label = esav_label(config)
+            if config.get("linearized"):
+                color, style = "#cc503e", ":"
         label += f" ($M={config['components']}$)"
         iterations = [int(row["iteration"]) for row in rows]
         for axis, key in zip(axes, ("objective", "test_mse")):

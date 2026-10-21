@@ -77,3 +77,32 @@ $$
 | PB-ESAV Plan 2 | $2.167517990\times10^{-3}$ |
 
 ![目标函数随更新次数变化，学习率为 1](../results/quadratic/comparison_lr1.png)
+## 诊断实验
+
+### ESAV验证
+
+| 参数 | 设置 |
+| --- | --- |
+| 学习率 | $1$ |
+| 更新次数 | $300$ |
+| 梯度 | 全量 |
+| SGD momentum / weight_decay | $0$ / $0$ |
+| AdamW betas | $(0.9, 0.999)$ |
+| AdamW eps / weight_decay | $10^{-8}$ / $0$ |
+
+| 方法 | 分量数 | 最终目标 $f(\boldsymbol{\phi}^{300})$ |
+| --- | --- | --- |
+| SGD | 1 | $5.000000272\times10^{1}$ |
+| AdamW | 1 | $3.747136635\times10^{-13}$ |
+| SAV | 1 | $9.194173800\times10^{-2}$ |
+| ESAV | 1 | $5.048020000\times10^{1}$ |
+| ESAV（r 更新指数的一阶近似） | 1 | $8.282451441\times10^{6}$ |
+| PB-Naive-ESAV Plan 1 | 2 | $3.572298599\times10^{-3}$ |
+| PB-Naive-ESAV Plan 2 | 2 | $3.550239817\times10^{-3}$ |
+
+| 方法 | $r^1/\exp(E(x^1))$ | $r^{300}/\exp(E(x^{300}))$ | $r<0$ 的记录数 |
+| --- | --- | --- | --- |
+| ESAV | $1.383619775\times10^{-87}$ | $1.383619775\times10^{-87}$ | 0 |
+| ESAV（r 更新指数的一阶近似） | $-2.029998667\times10^{2}$ | $0$ | 1 |
+
+![ESAV 诊断实验，学习率为 1](../results/quadratic/esav_diagnostic_lr1/comparison.png)

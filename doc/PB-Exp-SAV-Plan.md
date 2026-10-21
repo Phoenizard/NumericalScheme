@@ -1,8 +1,34 @@
 # PB-Exp-SAV Plan
 
-下文朴素方案对应 [PB Naive ESAV](../optimizer/pb_naive_esav.py)。
-当前 [PB-ESAV](../optimizer/pb_esav.py) 使用本文件“带Hessian信息的PB-ESAV”中的指数辅助变量方案，实验结果见
-[非线性实验报告](Nonlinear-Experiments-Plan.md)。
+## Review E- SAV
+
+$$
+\boxed{
+x^{n+1}
+=x^n-\eta\frac{r^n}{\exp(E(x^n))}\nabla E(x^n)
+}
+$$
+
+$$
+\boxed{
+\begin{aligned}
+r^{n+1}
+&=r^n\exp\!\left[
+\frac{r^n}{\exp(E(x^n))}
+\nabla E(x^n)^\top(x^{n+1}-x^n)
+\right]\\
+&=r^n\exp\!\left[
+-\eta\left(\frac{r^n}{\exp(E(x^n))}\right)^2
+\|\nabla E(x^n)\|^2
+\right].
+\end{aligned}
+}
+$$
+
+$$
+r^0=\exp(E(x^0)).
+$$
+
 
 ## 符号约定
 

@@ -13,6 +13,7 @@ PROBLEMS = {
         "relax": False,
         # 算法：SAV / PB-SAV 的总 shift；PB-ESAV 用于局部对数能量与曲率分母
         "total_shift": 1e-10,
+        "adamw": {"betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0},
         # 计算
         "device": "cpu",
         "dtype": "float64",
@@ -46,6 +47,7 @@ PROBLEMS = {
         },
         # 算法：SAV / PB-SAV 的总 shift；PB-ESAV 用于局部对数能量与曲率分母
         "total_shift": 1e-10,
+        "adamw": {"betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0},
         # 计算
         "device": "cpu",
         "dtype": "float64",

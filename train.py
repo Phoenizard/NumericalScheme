@@ -77,7 +77,8 @@ def _armijo_step(parameters, loss_fn, update_fn, initial_lr, settings, iteration
 
 def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
           total_shift=None, relax=False, *, esav_scheme=None, eta=None, metrics_fn=None,
-          method=None, line_search=None, history=None, curvature_shift=None):
+          method=None, line_search=None, history=None, curvature_shift=None,
+          esav_linearized=False):
     """Record initial/accepted states; rejected trials do not consume the update budget."""
     if eta is not None:
         if esav_scheme != "plan1" or not relax:
@@ -89,8 +90,9 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
             raise ValueError(f"Unsupported ESAV scheme: {esav_scheme}")
         if total_shift is not None:
             raise ValueError("ESAV auxiliary energies do not use total_shift")
-    elif method != "gd":
+    elif method not in ("gd", "sgd", "adamw", "esav"):
         total_shift = 1e-10 if total_shift is None else total_shift
+    has_esav_state = esav_scheme is not None or method == "esav"
     if line_search is not None:
         if not all(math.isfinite(value) for value in (lr, *line_search.values())):
             raise ValueError("Line-search settings must be finite")
@@ -115,14 +117,19 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
             terms = [terms] if isinstance(terms, torch.Tensor) else list(terms)
             energy = sum(terms)
             row = {"iteration": iteration, "objective": energy.item()}
-            if esav_scheme is None and method != "gd":
+            if method == "esav" and esav_linearized:
+                if state is None:
+                    state = {"r": energy.exp().detach()}
+                row.update(r=state["r"].item(),
+                           r_over_exp_E=(state["r"] * (-energy).exp()).item())
+            elif not has_esav_state and method not in ("gd", "sgd", "adamw"):
                 Q = (energy + total_shift).sqrt()
                 if q is None:
                     q = Q.detach().clone()
                 row.update(q=q.item(), Q=Q.item(), q_over_Q=(q / Q).item(),
                            modified_energy=q.square().item())
-            elif esav_scheme is not None:
-                energies = torch.stack(terms)
+            elif has_esav_state:
+                energies = torch.stack([energy] if method == "esav" else terms)
                 local_energy = energies
                 if esav_scheme == "plan2" and curvature_shift is not None:
                     local_energy = energies + 0.5 * (
@@ -155,8 +162,10 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
         if iteration < steps:
             if line_search is not None:
                 def trial_update(trial_lr):
-                    if method == "gd":
+                    if method in ("gd", "sgd"):
                         return step_fn(parameters, loss_fn, trial_lr)
+                    if method in ("esav", "adamw"):
+                        return step_fn(parameters, loss_fn, state, trial_lr)
                     if esav_scheme is None:
                         return step_fn(
                             parameters, loss_fn, q.clone(), trial_lr, total_shift, relax,
@@ -169,12 +178,14 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                 accepted_state, step_stats = _armijo_step(
                     parameters, loss_fn, trial_update, lr, line_search, iteration + 1,
                 )
-                if esav_scheme is None:
+                if not has_esav_state and method != "adamw":
                     q = accepted_state
                 else:
                     state = accepted_state
-            elif method == "gd":
+            elif method in ("gd", "sgd"):
                 step_fn(parameters, loss_fn, lr)
+            elif method in ("esav", "adamw"):
+                state = step_fn(parameters, loss_fn, state, lr)
             elif esav_scheme is None:
                 q = step_fn(parameters, loss_fn, q, lr, total_shift, relax)
             else:

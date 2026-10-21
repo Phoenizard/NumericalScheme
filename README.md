@@ -12,6 +12,9 @@ NumericalScheme/
 │   └── nonlinear_regression.py   # 单隐层 tanh 网络与初始化
 ├── optimizer/
 │   ├── gd.py                     # 总目标的普通梯度下降
+│   ├── sgd.py                    # 全量 SGD 基线，无动量
+│   ├── adamw.py                  # AdamW 基线，独立记录矩状态
+│   ├── esav.py                   # 原始 ESAV，可开启 r 更新的一阶指数近似
 │   ├── sav.py                    # SAV 单步更新
 │   ├── pb_sav.py                 # PB-SAV 单步更新
 │   ├── pb_naive_esav.py          # 原朴素 ESAV 两个 Plan，保留历史 Relax
@@ -40,6 +43,9 @@ conda activate numenv
 命令行选择问题、方法、PB-ESAV Plan 和研究变量，并用 `--output` 指定结果目录。
 `--method pb_esav` 使用局部辅助变量 $r_i=\exp(E_i+\frac12\ln(E_i+C/M))$ 的方案；
 `--method pb_naive_esav` 使用原朴素实现。两个方法均支持 `--scheme plan1/plan2`。
+`--method esav` 使用原始 E-SAV；`--linearized` 仅对其 r 更新的指数作一阶展开，
+不改变 x 更新。原始分支保存 `log_r`，近似分支保存可为负数的 `r`，不作截断。
+`--method sgd/adamw` 使用全量梯度基线；SGD 无动量，AdamW 参数见问题配置中的 `adamw`。
 旧命令中的 `--lr`、`--steps`、`--lambda-reg`、`--total-shift`、
 `--relax`、`--eta`、`--model`、`--data` 已移除。
 
@@ -86,9 +92,18 @@ PB-SAV 的 M=1 即 SAV。GD 对分量之和求梯度，不使用 shift 或辅助
 
 ## 二次问题
 
-默认设置保持 100 维、全 1 初值、两类能量系数 1 和 0.01、步长 10、
+默认设置保持 100 维、全 1 初值、两类能量系数 1 和 0.01、学习率 1、
 300 次更新、CPU、float64、无正则化。固定参数来自配置中的 `quadratic` 分区。
 `--loss split` 使用两个分量，`--loss total` 使用总能量。
+ESAV、SGD、AdamW 默认使用总能量。诊断实验见
+[Quadratic Experiment](doc/Quadratic-Experiment.md#esav验证)。
+
+```bash
+python -B run.py --problem quadratic --method esav --output results/quadratic/esav_total
+python -B run.py --problem quadratic --method esav --linearized --output results/quadratic/esav_linearized_total
+python -B run.py --problem quadratic --method sgd --output results/quadratic/sgd_total
+python -B run.py --problem quadratic --method adamw --output results/quadratic/adamw_total
+```
 
 ```bash
 python run.py --problem quadratic --method sav --loss total --output results/quadratic/sav_total
@@ -101,7 +116,7 @@ python run.py --problem quadratic --method pb_naive_esav --scheme plan2 --loss s
 
 每组实验保存 `config.json` 与 `history.csv`。配置记录实际使用的方法、分组数、
 固定参数、精度和 PyTorch 版本；非线性回归另记录数据路径及文件内的生成参数。
-ESAV 配置用 `esav_variant` 区分 `exp_log_energy` / `naive`；历史平方根方案标记为
+ESAV 配置用 `esav_variant` 区分 `original` / `exp_log_energy` / `naive`；历史平方根方案标记为
 `sqrt_energy`。新 PB-ESAV 另记录 `curvature_shift` 和总、局部辅助变量的定义。
 `iteration=0` 为初始状态，自适应训练的 600 次接受更新对应 601 行记录。
 
@@ -110,16 +125,19 @@ ESAV 配置用 `esav_variant` 区分 `exp_log_energy` / `naive`；历史平方�
 | `objective` | 真实总目标；回归实验为残差平方和除以 2N |
 | `test_mse` | 回归实验在无噪声测试点上的均方误差 |
 | `q`、`Q`、`q_over_Q` | SAV/PB-SAV 辅助变量、真实能量对应值及比值 |
-| `log_r`、`r_over_exp_E` | PB-ESAV 总辅助变量的对数及一致性比值 |
+| `log_r`、`r_over_exp_E` | ESAV/PB-ESAV 总辅助变量的对数及一致性比值 |
+| `r` | ESAV 一阶指数近似分支的有符号辅助变量；该分支不记录对数修正能量 |
 | `energy_i` | PB-ESAV 各分量能量 |
 | `log_r_i`、`r_i_over_exp_auxiliary_energy_i` | 新 PB-ESAV Plan 2 的局部对数状态及相对于 $\exp(E_i+\frac12\ln(E_i+C/M))$ 的比值 |
 | `r_i_over_exp_E_i` | PB Naive ESAV Plan 2 相对于 $\exp(E_i)$ 的局部比值 |
-| `modified_energy` | SAV/PB-SAV 的 q²，或 PB-ESAV 的 log_r |
+| `modified_energy` | SAV/PB-SAV 的 q²，或 ESAV/PB-ESAV 的 log_r |
 | `initial_lr`、`accepted_lr` | 每轮初始学习率 100，以及实际接受的学习率；初始状态行为 0 |
 | `rejected_trials`、`nonfinite_trials` | 当前接受步前的拒绝数、非有限试探数 |
 | `directional_derivative`、`armijo_bound` | grad(F)·delta，以及 F(theta)+c*grad(F)·delta |
 
 数值失败时另存 `failure.txt`，保留最后接受状态之前的历史。
+非线性回归中的 ESAV 使用 `--m 1`；新方法沿用该问题的 Armijo 回溯，
+拒绝试探步时保留上一步辅助变量或 AdamW 矩状态。
 
 GD 的历史包含 `iteration`、`objective`、`test_mse` 和上述 Armijo 回溯字段。
 PB-SAV 使用总 shift，并均分到各分量；PB Naive ESAV 和 GD 不使用 shift。
