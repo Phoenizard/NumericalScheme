@@ -40,6 +40,7 @@ Desktop.ini
 *.log
 .cache/
 /tmp/
+/TMP/
 
 # Datasets and generated experiment outputs; keep directory documentation
 /data/*

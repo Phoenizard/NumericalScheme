@@ -14,19 +14,35 @@ NumericalScheme/
 │   ├── gd.py                     # 总目标的普通梯度下降
 │   ├── sgd.py                    # 全量 SGD 基线，无动量
 │   ├── adamw.py                  # AdamW 基线，独立记录矩状态
-│   ├── esav.py                   # 原始 ESAV，可开启 r 更新的一阶指数近似
+│   ├── esav.py                   # 单能量 ESAV，r = exp(E) * sqrt(E+C)
+│   ├── naive_esav.py            # naiveESAV，支持完全 Relax 或 r 更新的一阶指数近似
 │   ├── sav.py                    # SAV 单步更新
 │   ├── pb_sav.py                 # PB-SAV 单步更新
-│   ├── pb_naive_esav.py          # 原朴素 ESAV 两个 Plan，保留历史 Relax
+│   ├── pb_naive_esav.py         # PB-naiveESAV 两个 Plan，保留历史 Relax
 │   └── pb_esav.py                # 指数内含对数能量的方案，非 Relax 的 Plan 1 / Plan 2
 ├── data/                         # 固定输入数据，默认不加入 Git
 ├── doc/                          # 论文、推导与实验设计
 ├── results/                      # 每组实验的配置和逐步记录
+├── TMP/                          # 项目内临时文件与工具缓存
 ├── run.py                        # 组装并运行一组实验
 ├── train.py                      # 公共迭代循环与指标采集
 ├── plot_figure.py                 # 读取已有结果绘图
 └── requirements.txt
 ```
+
+## 方法命名
+
+| 名称 | 命令行方法 | 辅助变量 |
+| --- | --- | --- |
+| naiveESAV | `naive_esav` | 原始 $r=\exp(E)$ |
+| ESAV | `esav` | $r=\exp(E+\frac12\ln(E+C))$ |
+| PB-naiveESAV | `pb_naive_esav` | $r=\exp(E)$，$r_i=\exp(E_i)$ |
+| PB-ESAV | `pb_esav` | $r=\exp(E)$，$r_i=\exp(E_i+\frac12\ln(E_i+C/M))$ |
+
+原始方法使用 `naive_esav`；`esav` 现在用于新辅助变量的单能量方法。
+PB 版本的命令仍为 `pb_naive_esav`、`pb_esav`。
+历史结果目录、配置和图片保留原样；绘图入口读取旧配置时使用新名称。
+文献 RE-SAV 完整算法仍为待办，尚未实现。
 
 ## 环境与配置
 
@@ -42,9 +58,15 @@ conda activate numenv
 
 命令行选择问题、方法、PB-ESAV Plan 和研究变量，并用 `--output` 指定结果目录。
 `--method pb_esav` 使用局部辅助变量 $r_i=\exp(E_i+\frac12\ln(E_i+C/M))$ 的方案；
-`--method pb_naive_esav` 使用原朴素实现。两个方法均支持 `--scheme plan1/plan2`。
-`--method esav` 使用原始 E-SAV；`--linearized` 仅对其 r 更新的指数作一阶展开，
+`--method pb_naive_esav` 使用 PB-naiveESAV。两个方法均支持 `--scheme plan1/plan2`。
+`--method esav` 使用单能量新 ESAV；从 `total_shift` 读取 $C$，保存
+`log_r`，不启用 Relax 或指数一阶展开。公式见方案文档末尾的“单能量 ESAV”。
+`--method naive_esav` 使用 naiveESAV；`--linearized` 仅对其 r 更新的指数作一阶展开，
 不改变 x 更新。原始分支保存 `log_r`，近似分支保存可为负数的 `r`，不作截断。
+naiveESAV 读取对应问题配置的 `relax`；设为 `True` 时，在每步参数更新后执行
+$\log r^{n+1}\leftarrow\min\{E(x^{n+1}),\log r^n\}$，参数保持本步计算值。
+这是按 SAV 耗散预算思路扩展的完全 Relax；不可与 `--linearized` 同时使用。
+运行时指定新的 `--output` 目录，配置会记录 `relax` 及 `relaxation_update`。
 `--method sgd/adamw` 使用全量梯度基线；SGD 无动量，AdamW 参数见问题配置中的 `adamw`。
 旧命令中的 `--lr`、`--steps`、`--lambda-reg`、`--total-shift`、
 `--relax`、`--eta`、`--model`、`--data` 已移除。
@@ -86,21 +108,24 @@ python -B run.py --problem nonlinear_regression --method gd --m 30 --output resu
 
 `--m` 可取 `1, 2, 4, 8, 16, 30`；更换 M 时同步更换输出目录。
 PB-SAV 的 M=1 即 SAV。GD 对分量之和求梯度，不使用 shift 或辅助变量。
-当前 Armijo 设置下，M=1、2、4、8、16、30 的 GD、PB-SAV、PB Naive ESAV 两个 Plan
+当前 Armijo 设置下，M=1、2、4、8、16、30 的 GD、PB-SAV、PB-naiveESAV 两个 Plan
 及新 PB-ESAV 两个 Plan 均已有结果，每个 M 单独列表与绘图，见实验文档。
 历史目录与配置保留当时的名称。
 
 ## 二次问题
 
-默认设置保持 100 维、全 1 初值、两类能量系数 1 和 0.01、学习率 1、
-300 次更新、CPU、float64、无正则化。固定参数来自配置中的 `quadratic` 分区。
+默认设置为 100 维、全 1 初值、两类能量系数 1 和 0.01、300 次接受更新、
+CPU、float64、无正则化。Armijo 每轮从学习率 100 开始，拒绝后乘 0.5，
+最低试到 1e-6，系数为 1e-4，与非线性回归相同；参数与辅助状态随拒绝步回滚。
+固定参数来自配置中的 `quadratic` 分区。
 `--loss split` 使用两个分量，`--loss total` 使用总能量。
-ESAV、SGD、AdamW 默认使用总能量。诊断实验见
-[Quadratic Experiment](doc/Quadratic-Experiment.md#esav验证)。
+ESAV、naiveESAV、SGD、AdamW 默认使用总能量。当前 [Validation](doc/Validation.md)
+对比 SAV、ESAV、naiveESAV、SGD，按用户要求不放 AdamW，均关闭 Relax。
 
 ```bash
-python -B run.py --problem quadratic --method esav --output results/quadratic/esav_total
-python -B run.py --problem quadratic --method esav --linearized --output results/quadratic/esav_linearized_total
+python -B run.py --problem quadratic --method esav --loss total --output results/quadratic/esav_total_armijo_lr100
+python -B run.py --problem quadratic --method naive_esav --output results/quadratic/naive_esav_total
+python -B run.py --problem quadratic --method naive_esav --linearized --output results/quadratic/naive_esav_linearized_total
 python -B run.py --problem quadratic --method sgd --output results/quadratic/sgd_total
 python -B run.py --problem quadratic --method adamw --output results/quadratic/adamw_total
 ```
@@ -116,31 +141,33 @@ python run.py --problem quadratic --method pb_naive_esav --scheme plan2 --loss s
 
 每组实验保存 `config.json` 与 `history.csv`。配置记录实际使用的方法、分组数、
 固定参数、精度和 PyTorch 版本；非线性回归另记录数据路径及文件内的生成参数。
-ESAV 配置用 `esav_variant` 区分 `original` / `exp_log_energy` / `naive`；历史平方根方案标记为
-`sqrt_energy`。新 PB-ESAV 另记录 `curvature_shift` 和总、局部辅助变量的定义。
-`iteration=0` 为初始状态，自适应训练的 600 次接受更新对应 601 行记录。
+指数辅助变量方法用 `esav_variant` 区分 `naive` / `exp_log_energy`；历史配置中的
+`original`、`naive` 对应 naiveESAV、PB-naiveESAV，`sqrt_energy` 标记历史平方根方案。
+新 PB-ESAV 另记录 `curvature_shift` 和总、局部辅助变量的定义。
+`iteration=0` 为初始状态；二次型 300 次接受更新对应 301 行，非线性回归 600 次对应 601 行。
 
 | 字段 | 含义 |
 | --- | --- |
 | `objective` | 真实总目标；回归实验为残差平方和除以 2N |
 | `test_mse` | 回归实验在无噪声测试点上的均方误差 |
 | `q`、`Q`、`q_over_Q` | SAV/PB-SAV 辅助变量、真实能量对应值及比值 |
-| `log_r`、`r_over_exp_E` | ESAV/PB-ESAV 总辅助变量的对数及一致性比值 |
-| `r` | ESAV 一阶指数近似分支的有符号辅助变量；该分支不记录对数修正能量 |
+| `log_r`、`r_over_exp_E` | naiveESAV/PB-naiveESAV/PB-ESAV 总辅助变量的对数及一致性比值 |
+| `log_r`、`r_over_exp_auxiliary_energy` | 单能量 ESAV 的对数辅助变量及 $r/[\exp(E)\sqrt{E+C}]$ |
+| `r` | naiveESAV 一阶指数近似分支的有符号辅助变量；该分支不记录对数修正能量 |
 | `energy_i` | PB-ESAV 各分量能量 |
 | `log_r_i`、`r_i_over_exp_auxiliary_energy_i` | 新 PB-ESAV Plan 2 的局部对数状态及相对于 $\exp(E_i+\frac12\ln(E_i+C/M))$ 的比值 |
-| `r_i_over_exp_E_i` | PB Naive ESAV Plan 2 相对于 $\exp(E_i)$ 的局部比值 |
-| `modified_energy` | SAV/PB-SAV 的 q²，或 ESAV/PB-ESAV 的 log_r |
+| `r_i_over_exp_E_i` | PB-naiveESAV Plan 2 相对于 $\exp(E_i)$ 的局部比值 |
+| `modified_energy` | SAV/PB-SAV 的 q²，或 ESAV/naiveESAV/PB-naiveESAV/PB-ESAV 的 log_r |
 | `initial_lr`、`accepted_lr` | 每轮初始学习率 100，以及实际接受的学习率；初始状态行为 0 |
 | `rejected_trials`、`nonfinite_trials` | 当前接受步前的拒绝数、非有限试探数 |
 | `directional_derivative`、`armijo_bound` | grad(F)·delta，以及 F(theta)+c*grad(F)·delta |
 
 数值失败时另存 `failure.txt`，保留最后接受状态之前的历史。
-非线性回归中的 ESAV 使用 `--m 1`；新方法沿用该问题的 Armijo 回溯，
+非线性回归中的 ESAV、naiveESAV 使用 `--m 1`；新方法沿用该问题的 Armijo 回溯，
 拒绝试探步时保留上一步辅助变量或 AdamW 矩状态。
 
 GD 的历史包含 `iteration`、`objective`、`test_mse` 和上述 Armijo 回溯字段。
-PB-SAV 使用总 shift，并均分到各分量；PB Naive ESAV 和 GD 不使用 shift。
+PB-SAV 使用总 shift，并均分到各分量；PB-naiveESAV 和 GD 不使用 shift。
 新 PB-ESAV 从同一 `total_shift` 配置读取 $C$，用于局部辅助变量中的
 $\frac12\ln(E_i+C/M)$ 及曲率权重 $1+1/[2(E_i+C/M)]$；
 真实目标与总辅助变量 $r=\exp(E)$ 保持不变。该值保存为运行配置中的 `curvature_shift`。
@@ -163,12 +190,16 @@ python plot_figure.py --training --input results/nonlinear_regression/pb_sav_m30
 `--input` 可传入同一 M 下已完成的多个实验目录。每个 M 单独作图，
 左侧为训练目标，右侧为测试 MSE；是否写入文档按当前任务要求决定。
 旧二次问题的单组能量图与多组辅助变量对比图入口保持不变。
+`--modified-energy` 按学习率分别绘制二次问题的修正能量，保留负值；
+SAV 使用 q²，ESAV / naiveESAV / PB-naiveESAV / PB-ESAV 使用 log_r；SGD、AdamW 绘制真实目标 E 作为参考，
+在图例中区分。naiveESAV 一阶指数近似分支不绘制对数修正能量，不使用 log|r| 替代。
+二次型目标或辅助比值含零时采用标注线性区间的 symlog 坐标，保留数值零点。
 
 ## 历史 Relax 实验
 
-已有 Relax 实现、配置与结果保留；ESAV 的历史 Relax 位于 `pb_naive_esav.py`，
+已有 Relax 实现、配置与结果保留；PB-naiveESAV 的历史 Relax 位于 `pb_naive_esav.py`，
 新 `pb_esav.py` 不支持 Relax，当前研究不开展 Relax 参数扫描。
-旧二次问题记录包含 SAV/PB-SAV 的普通版与 Relax 版、PB Naive ESAV 两种 Plan，
+旧二次问题记录包含 SAV/PB-SAV 的普通版与 Relax 版、PB-naiveESAV 两种 Plan，
 以及 Plan 1 的 eta=1、0.95、0.1 三组 Relax 结果。旧数据的路径保持原样，
 可继续使用绘图脚本读取。
 

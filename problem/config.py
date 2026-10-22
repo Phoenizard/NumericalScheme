@@ -7,11 +7,17 @@ PROBLEMS = {
         "initial_value": 1.0,
         "energy_weights": [1.0, 0.01],
         # 训练：无动量
-        "lr": 1.0,
+        "lr": 100.0,
         "steps": 300,
         "lambda_reg": 0.0,
         "relax": False,
-        # 算法：SAV / PB-SAV 的总 shift；PB-ESAV 用于局部对数能量与曲率分母
+        # 与非线性回归相同的 Armijo 配置；每轮重新从 lr 开始
+        "line_search": {
+            "min_lr": 1e-6,
+            "shrink": 0.5,
+            "armijo_c": 1e-4,
+        },
+        # 算法：SAV / ESAV / PB-SAV 的总 shift；PB-ESAV 用于局部辅助变量
         "total_shift": 1e-10,
         "adamw": {"betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0},
         # 计算

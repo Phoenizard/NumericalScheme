@@ -1,6 +1,14 @@
-# PB-Exp-SAV Plan
+# PB-naiveESAV / PB-ESAV Plan
 
-## Review E- SAV
+## 命名与当前共识
+
+| 项目 | 共识与状态 |
+| --- | --- |
+| SAV / naiveESAV | 均已实现。naiveESAV 指原始 $r=\exp(E)$ 方法，在当前二次型实验中失败。 |
+| [RE-SAV](https://arxiv.org/abs/2204.06258) | 预测位置的多项式修正与 Relax 仍为待办，尚未实现；与现有 naiveESAV 加完全 Relax 区分。 |
+| PB-naiveESAV / PB-ESAV | 原 PB Naive ESAV 统一改名为 PB-naiveESAV；新辅助变量方案保留 PB-ESAV。新辅助变量的单能量 ESAV 已实现于 `optimizer/esav.py`，Armijo 二次型结果见 [Validation](Validation.md)。 |
+
+## Review naiveESAV
 
 $$
 \boxed{
@@ -57,7 +65,7 @@ r^{n+1}=\prod_i r_i^{n+1},
 $$
 
 
-## 从PBSAV推导的朴素PB-ESAV离散形式
+## 从PBSAV推导的PB-naiveESAV离散形式
 
 从Modified 对数导数出发：
 $$
@@ -251,7 +259,7 @@ $$
 
 ### 问题发现
 
-在执行非线性优化问题中，尝试用GD+Armijo策略拟合sin函数，我们发现PB-SAV拟合顺利，但是上面的朴素PB-ESAV方案无法收敛拟合。背后的原因是PB-SAV实际上在设计的时候吸收了部分Hessian的信息。回忆牛顿法之所以使用Hessian矩阵，是因为Hessian矩阵的曲率信息暗示了哪个方向的梯度分量是需要被放大或者缩小的。
+在执行非线性优化问题中，尝试用GD+Armijo策略拟合sin函数，我们发现PB-SAV拟合顺利，但是上面的PB-naiveESAV方案无法收敛拟合。背后的原因是PB-SAV实际上在设计的时候吸收了部分Hessian的信息。回忆牛顿法之所以使用Hessian矩阵，是因为Hessian矩阵的曲率信息暗示了哪个方向的梯度分量是需要被放大或者缩小的。
 
 具体地，考虑 $\boldsymbol{\theta}$ 为当前状态，$\Delta\boldsymbol{\theta}$ 为参数增量。假设目标函数 $F$ 二阶连续可微，根据二阶 Taylor 展开，有：
 
@@ -273,7 +281,7 @@ $$
 
 因此，更新量不仅取决于梯度，也取决于曲率：**在黑塞矩阵的特征方向上，同样大小的梯度分量，曲率越大，对应的位移越小；曲率越小，对应的位移越大。** 这就是我们考虑黑塞信息的原因：用曲率确定各方向上合适的更新幅度。
 
-对上面的 PB Naive ESAV，将总目标统一记为 $F$，令 $\eta=\Delta t$、$\alpha=r^n/\exp(F(\boldsymbol{\theta}^n))$，并省略当前步的上标。参数更新方程可以逐步整理为
+对上面的 PB-naiveESAV，将总目标统一记为 $F$，令 $\eta=\Delta t$、$\alpha=r^n/\exp(F(\boldsymbol{\theta}^n))$，并省略当前步的上标。参数更新方程可以逐步整理为
 
 $$
 \begin{aligned}
@@ -347,11 +355,11 @@ $$
 
 **分子中的残差平方，被分母中的残差平方抵消了。** 当 $C=0$ 且各残差非零时，它恰好等于 $\mathbf H$ 的第一项；实际使用 $C=10^{-10}$ 时，在残差平方远大于 $2C$ 的范围内近似保留这一项。
 
-PB Naive ESAV Plan 1 的矩阵则为
+PB-naiveESAV Plan 1 的矩阵则为
 
 $$
 \begin{aligned}
-\mathbf B_{\mathrm{Naive}}
+\mathbf B_{\mathrm{naiveESAV}}
 &=\alpha\sum_i
 \boldsymbol{\nabla}E_i(\boldsymbol{\nabla}E_i)^\top\\
 &=\frac{\alpha}{N}\sum_i
@@ -363,7 +371,7 @@ $$
 \end{aligned}
 $$
 
-这里没有对应的分母来抵消残差平方。因此，**即使黑塞第一项中的输出梯度外积仍然显著，残差减小也会使它在 $\mathbf B$ 中的权重趋向零**（辅助变量比值有界时）。Plan 2 将总比值 $\alpha$ 换为各分量的 $r_i/\exp(E_i)$，同样保留了这层残差平方权重。这就是朴素 ESAV 随残差减小而削弱曲率信息的原因。
+这里没有对应的分母来抵消残差平方。因此，**即使黑塞第一项中的输出梯度外积仍然显著，残差减小也会使它在 $\mathbf B$ 中的权重趋向零**（辅助变量比值有界时）。Plan 2 将总比值 $\alpha$ 换为各分量的 $r_i/\exp(E_i)$，同样保留了这层残差平方权重。这就是 PB-naiveESAV 随残差减小而削弱曲率信息的原因。
 
 ### 带Hessian信息的PB-ESAV
 
@@ -681,7 +689,7 @@ $$
 =
 \underbrace{
 \sum_i\boldsymbol{\nabla}E_i^n(\boldsymbol{\nabla}E_i^n)^\top
-}_{\text{朴素 ESAV 的外积项}}
+}_{\text{PB-naiveESAV 的外积项}}
 +
 \underbrace{
 \sum_i\frac{
@@ -709,3 +717,71 @@ $$
 其中第二项与 PB-SAV 相同：残差平方远大于 $2C$ 时，近似保留黑塞矩阵的第一项。Plan 2 保留相同的两项结构，但各分量另带各自的局部辅助变量比值。
 
 对一般能量，本方案得到的是与 PB-SAV 相同的归一化外积结构；其与黑塞矩阵的具体对应取决于能量形式。
+
+## 单能量 ESAV
+
+将 PB-ESAV 的**局部辅助变量**用于单能量，定义新的 **ESAV**：
+
+$$
+\boxed{
+r(t)=\exp\!\left(E(x(t))+\frac12\ln(E(x(t))+C)\right)
+=e^{E(x(t))}\sqrt{E(x(t))+C},
+\qquad E(x)+C>0.
+}
+$$
+
+按此定义初始化 $r^0$。链式法则给出
+
+$$
+\frac{d\ln r}{dt}
+=
+\left(1+\frac{1}{2(E(x)+C)}\right)
+\nabla E(x)^\top\frac{dx}{dt}.
+$$
+
+**沿用 naiveESAV 的离散构造**：辅助方程也乘入连续层面等于 $1$ 的比值
+
+$$
+\frac{r}{e^{E(x)}\sqrt{E(x)+C}},
+$$
+
+随后将比值、系数和梯度取在第 $n$ 步。
+
+参数更新为
+
+$$
+\boxed{
+x^{n+1}
+=x^n-\Delta t\,
+\frac{r^n}{e^{E(x^n)}\sqrt{E(x^n)+C}}
+\nabla E(x^n).
+}
+$$
+
+辅助变量满足
+
+$$
+\ln r^{n+1}-\ln r^n
+=
+\frac{r^n}{e^{E(x^n)}\sqrt{E(x^n)+C}}
+\left(1+\frac{1}{2(E(x^n)+C)}\right)
+\nabla E(x^n)^\top(x^{n+1}-x^n).
+$$
+
+代入参数更新，得到
+
+$$
+\boxed{
+r^{n+1}
+=r^n\exp\!\left[
+-\Delta t
+\left(1+\frac{1}{2(E(x^n)+C)}\right)
+\left(
+\frac{r^n}{e^{E(x^n)}\sqrt{E(x^n)+C}}
+\right)^2
+\|\nabla E(x^n)\|^2
+\right].
+}
+$$
+
+两个更新的右端均只依赖 $x^n,r^n$，直接计算，**不对指数作一阶展开**。

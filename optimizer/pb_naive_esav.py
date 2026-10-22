@@ -1,4 +1,4 @@
-"""PB Naive ESAV Plans 1 and 2, including the historical Relax variants."""
+"""PB-naiveESAV Plans 1 and 2, including the historical Relax variants."""
 
 import math
 
@@ -15,12 +15,12 @@ def step(parameters, loss_fn, state, lr, scheme="plan1", relax=False, eta=None):
     added back to the trial log_r (default: 1, the original full budget).
     """
     if scheme not in ("plan1", "plan2"):
-        raise ValueError(f"Unsupported PB-Exp-SAV scheme: {scheme}")
+        raise ValueError(f"Unsupported PB-naiveESAV scheme: {scheme}")
     if not math.isfinite(lr) or lr <= 0:
         raise ValueError("lr must be finite and positive")
     if eta is not None:
         if scheme != "plan1" or not relax:
-            raise ValueError("eta is only supported by relaxed PB-Exp-SAV Plan 1")
+            raise ValueError("eta is only supported by relaxed PB-naiveESAV Plan 1")
         if not math.isfinite(eta) or not 0 <= eta <= 1:
             raise ValueError("eta must be finite and in [0, 1]")
     eta = 1.0 if eta is None else eta
@@ -36,7 +36,7 @@ def step(parameters, loss_fn, state, lr, scheme="plan1", relax=False, eta=None):
             raise ValueError("The number of energy components must remain constant")
         weights = (state["log_r_i"] - energies).exp()
     if not all(torch.isfinite(value).all() for value in (energies, ratio, weights)):
-        raise FloatingPointError("Non-finite PB-Exp-SAV energy or auxiliary ratio")
+        raise FloatingPointError("Non-finite PB-naiveESAV energy or auxiliary ratio")
 
     columns = []
     for i, term in enumerate(terms):
@@ -57,7 +57,7 @@ def step(parameters, loss_fn, state, lr, scheme="plan1", relax=False, eta=None):
     if scheme == "plan2":
         next_state["log_r_i"] = (state["log_r_i"] + gradients.T @ increment).detach()
     if not all(torch.isfinite(value).all() for value in (increment, *next_state.values())):
-        raise FloatingPointError("Non-finite PB-Exp-SAV update")
+        raise FloatingPointError("Non-finite PB-naiveESAV update")
 
     with torch.no_grad():
         offset = 0
@@ -72,7 +72,7 @@ def step(parameters, loss_fn, state, lr, scheme="plan1", relax=False, eta=None):
             if new_energies.shape != energies.shape:
                 raise ValueError("The number of energy components must remain constant")
             if not torch.isfinite(new_energies).all():
-                raise FloatingPointError("Non-finite energy after PB-Exp-SAV parameter update")
+                raise FloatingPointError("Non-finite energy after PB-naiveESAV parameter update")
             new_energy = new_energies.sum()
             if scheme == "plan1":
                 if eta == 1:
@@ -90,10 +90,10 @@ def step(parameters, loss_fn, state, lr, scheme="plan1", relax=False, eta=None):
                     trial_logs = next_state["log_r_i"]
                     denominator = new_energy - trial_logs.sum()
                     if denominator <= 0:
-                        raise FloatingPointError("Nonpositive PB-Exp-SAV relaxation denominator")
+                        raise FloatingPointError("Nonpositive PB-naiveESAV relaxation denominator")
                     xi = (new_energy - state["log_r"]) / denominator
                     next_state["log_r_i"] = xi * trial_logs + (1 - xi) * new_energies
                 next_state["log_r"] = next_state["log_r_i"].sum()
             if not all(torch.isfinite(value).all() for value in next_state.values()):
-                raise FloatingPointError("Non-finite PB-Exp-SAV relaxed state")
+                raise FloatingPointError("Non-finite PB-naiveESAV relaxed state")
     return next_state

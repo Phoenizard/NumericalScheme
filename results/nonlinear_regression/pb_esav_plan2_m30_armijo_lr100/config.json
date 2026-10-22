@@ -1,0 +1,153 @@
+{
+  "n_train": 30,
+  "n_test": 1001,
+  "x_min": 0.0,
+  "x_max": 1.0,
+  "noise_std": 0.1,
+  "noise_seed": 1,
+  "partition_seed": 3,
+  "data_path": "data/nonlinear_regression.pt",
+  "hidden_width": 50,
+  "hidden_init_min": -1.0,
+  "hidden_init_max": 1.0,
+  "init_seed": 2,
+  "lr": 100.0,
+  "gd_lr": 0.22,
+  "steps": 600,
+  "lambda_reg": 0.0,
+  "relax": false,
+  "line_search": {
+    "min_lr": 1e-06,
+    "shrink": 0.5,
+    "armijo_c": 0.0001
+  },
+  "total_shift": null,
+  "device": "cpu",
+  "dtype": "torch.float64",
+  "sampling": "linspace",
+  "target": "sin(2*pi*x)",
+  "noise": "normal",
+  "torch_version": "2.14.1",
+  "model": "tanh",
+  "data": "/Users/phoenizard/Workplace/NumericalScheme/data/nonlinear_regression.pt",
+  "data_config": {
+    "n_train": 30,
+    "n_test": 1001,
+    "x_min": 0.0,
+    "x_max": 1.0,
+    "noise_std": 0.1,
+    "noise_seed": 1,
+    "device": "cpu",
+    "dtype": "float64",
+    "sampling": "linspace",
+    "target": "sin(2*pi*x)",
+    "noise": "normal",
+    "torch_version": "2.14.1"
+  },
+  "batch_size": 30,
+  "components": 30,
+  "dimension": 151,
+  "initial_value": null,
+  "output_init_bound": 0.1414213562373095,
+  "step_policy": "armijo_lr_reset",
+  "grouping": "nested_random_bisection",
+  "group_indices": [
+    [
+      16
+    ],
+    [
+      27
+    ],
+    [
+      19
+    ],
+    [
+      24
+    ],
+    [
+      4
+    ],
+    [
+      10
+    ],
+    [
+      6
+    ],
+    [
+      0
+    ],
+    [
+      1
+    ],
+    [
+      7
+    ],
+    [
+      3
+    ],
+    [
+      26
+    ],
+    [
+      23
+    ],
+    [
+      9
+    ],
+    [
+      5
+    ],
+    [
+      2
+    ],
+    [
+      29
+    ],
+    [
+      14
+    ],
+    [
+      11
+    ],
+    [
+      17
+    ],
+    [
+      18
+    ],
+    [
+      20
+    ],
+    [
+      13
+    ],
+    [
+      12
+    ],
+    [
+      15
+    ],
+    [
+      28
+    ],
+    [
+      8
+    ],
+    [
+      21
+    ],
+    [
+      25
+    ],
+    [
+      22
+    ]
+  ],
+  "reproduction_status": "declared_defaults_not_exact_author_replication",
+  "problem": "nonlinear_regression",
+  "method": "pb_esav",
+  "loss": "split",
+  "momentum": false,
+  "scheme": "plan2",
+  "modified_energy": "log_r"
+}

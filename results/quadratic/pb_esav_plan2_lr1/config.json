@@ -1,0 +1,29 @@
+{
+  "dimension": 100,
+  "initial_value": 1.0,
+  "energy_weights": [
+    1.0,
+    0.01
+  ],
+  "lr": 1.0,
+  "steps": 300,
+  "lambda_reg": 0.0,
+  "relax": false,
+  "total_shift": null,
+  "device": "cpu",
+  "dtype": "torch.float64",
+  "esav_variant": "exp_log_energy",
+  "curvature_shift": 1e-10,
+  "total_auxiliary": "exp(sum(E_i))",
+  "local_auxiliary": "exp(E_i + 0.5 * log(E_i + C/M))",
+  "model": "none",
+  "data": null,
+  "components": 2,
+  "problem": "quadratic",
+  "method": "pb_esav",
+  "loss": "split",
+  "momentum": false,
+  "torch_version": "2.14.1",
+  "scheme": "plan2",
+  "modified_energy": "log_r"
+}
