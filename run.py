@@ -9,7 +9,8 @@ from pathlib import Path
 import torch
 
 from network.nonlinear_regression import TanhRegressor
-from optimizer import adamw, esav, gd, naive_esav, pb_esav, pb_naive_esav, pb_sav, sav, sgd
+from optimizer import Inverse_sav, adamw, csav, esav, gd, naive_esav
+from optimizer import pb_esav, pb_naive_esav, pb_sav, sav, sgd
 from problem import nonlinear_regression, quadratic
 from problem.config import PROBLEMS
 from train import train
@@ -24,8 +25,10 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
     step_fn = {
         "gd": gd.step, "sav": sav.step, "pb_sav": pb_sav.step, "pb_esav": pb_esav.step,
         "pb_naive_esav": pb_naive_esav.step,
-        "esav": esav.step,
+        "esav": esav.step, "csav": csav.step,
         "naive_esav": naive_esav.step, "sgd": sgd.step, "adamw": adamw.step,
+        "inverse_sav": Inverse_sav.step,
+        "pb_inverse_sav": partial(Inverse_sav.step, pullback=True),
     }[method]
     is_esav = method in ("pb_esav", "pb_naive_esav")
     if linearized and method != "naive_esav":
@@ -35,12 +38,22 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
     if scheme is not None and not is_esav:
         raise ValueError("--scheme is only used by PB-ESAV / PB-naiveESAV")
     scheme = (scheme or "plan1") if is_esav else None
-    total_shift = settings["total_shift"] if method in ("sav", "esav", "pb_sav") else None
+    total_shift = settings["total_shift"] if method in (
+        "sav", "csav", "esav", "pb_sav", "inverse_sav", "pb_inverse_sav",
+    ) else None
     curvature_shift = settings["total_shift"] if method == "pb_esav" else None
     relax = settings["relax"] if method not in ("gd", "sgd", "adamw") else False
     if method == "naive_esav" and linearized and relax:
         raise ValueError("Full Relax requires naiveESAV (linearized=False)")
-    if method == "pb_esav":
+    if method in ("inverse_sav", "pb_inverse_sav"):
+        if relax:
+            raise ValueError("Inverse SAV does not use Relax")
+        config.update(
+            total_auxiliary="1/(E+C)", auxiliary_state="r", modified_energy="1/r",
+            source="optimizer/InverseSAV.py",
+            pullback="centered_component_covariance" if method == "pb_inverse_sav" else None,
+        )
+    elif method == "pb_esav":
         if relax:
             raise ValueError("PB-ESAV does not support Relax; historical Relax uses pb_naive_esav")
         step_fn = partial(step_fn, curvature_shift=curvature_shift)
@@ -48,6 +61,13 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             esav_variant="exp_log_energy", curvature_shift=curvature_shift,
             total_auxiliary="exp(sum(E_i))",
             local_auxiliary="exp(E_i + 0.5 * log(E_i + C/M))",
+        )
+    elif method == "csav":
+        if relax:
+            raise ValueError("CSAV does not use post-step Relax")
+        config.update(
+            auxiliary_variant="recovery_bounded_feedback", total_auxiliary="E + C",
+            auxiliary_state="r", modified_energy="r", source="optimizer/csav.py",
         )
     elif method == "esav":
         if relax:
@@ -89,10 +109,10 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             raise ValueError(
                 "Use GD/PB-SAV/PB-ESAV/PB-naiveESAV with --m; --loss is only for quadratic"
             )
-        if m not in (1, 2, 4, 8, 16, 30):
-            raise ValueError("Specify --m from 1, 2, 4, 8, 16, 30")
-        if method in ("esav", "naive_esav") and m != 1:
-            raise ValueError("Single-energy ESAV methods require --m 1")
+        if m not in (1, 2, 4, 8, 15, 16, 30):
+            raise ValueError("Specify --m from 1, 2, 4, 8, 15, 16, 30")
+        if method in ("csav", "esav", "naive_esav", "inverse_sav") and m != 1:
+            raise ValueError("Single-energy methods require --m 1")
         data_path = root / settings["data_path"]
         data = torch.load(data_path, map_location=settings["device"], weights_only=True)
         dtype = getattr(torch, settings["dtype"])
@@ -128,7 +148,9 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         if m is not None:
             raise ValueError("--m is only used by nonlinear_regression")
         loss = loss or (
-            "total" if method in ("esav", "naive_esav", "sgd", "adamw") else "split"
+            "total" if method in (
+                "csav", "esav", "naive_esav", "inverse_sav", "sgd", "adamw",
+            ) else "split"
         )
         x = quadratic.init_parameters(settings)
         parameters = (x,)
@@ -141,7 +163,9 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             name += f"_{loss}"
         config.update(
             model="none", data=None,
-            components=2 if method not in ("sav", "esav", "naive_esav") and loss == "split" else 1,
+            components=2 if method not in (
+                "sav", "csav", "esav", "naive_esav", "inverse_sav"
+            ) and loss == "split" else 1,
             line_search=line_search,
             step_policy="fixed" if line_search is None else "armijo_lr_reset",
         )
@@ -194,8 +218,9 @@ def main():
     parser.add_argument(
         "--method",
         choices=[
-            "gd", "sgd", "adamw", "sav", "esav", "naive_esav", "pb_sav",
+            "gd", "sgd", "adamw", "sav", "csav", "esav", "naive_esav", "pb_sav",
             "pb_esav", "pb_naive_esav",
+            "inverse_sav", "pb_inverse_sav",
         ],
         default="pb_sav",
     )
@@ -203,10 +228,10 @@ def main():
                         help="Use a first-order Taylor expansion only in the naiveESAV r update")
     parser.add_argument("--scheme", choices=["plan1", "plan2"],
                         help="PB-ESAV / PB-naiveESAV scheme (default: plan1)")
-    parser.add_argument("--m", type=int, choices=[1, 2, 4, 8, 16, 30],
+    parser.add_argument("--m", type=int, choices=[1, 2, 4, 8, 15, 16, 30],
                         help="Number of nonlinear-regression energy components")
     parser.add_argument("--loss", choices=["split", "total"],
-                        help="Quadratic energy splitting (single-energy ESAV/SGD/AdamW: total)")
+                        help="Quadratic energy splitting (CSAV/ESAV/SGD/AdamW default: total)")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     run_experiment(**vars(args))

@@ -117,7 +117,23 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
             terms = [terms] if isinstance(terms, torch.Tensor) else list(terms)
             energy = sum(terms)
             row = {"iteration": iteration, "objective": energy.item()}
-            if method == "naive_esav" and naive_esav_linearized:
+            if method in ("inverse_sav", "pb_inverse_sav"):
+                shifted = energy + total_shift
+                if not torch.isfinite(shifted).all() or (shifted <= 0).any():
+                    raise FloatingPointError(f"Inverse SAV requires E + C > 0 at {iteration}")
+                if q is None:
+                    q = shifted.reciprocal().detach().clone()
+                row.update(r=q.item(), r_times_E_plus_C=(q * shifted).item(),
+                           modified_energy=q.reciprocal().item())
+            elif method == "csav":
+                shifted = energy + total_shift
+                if not torch.isfinite(shifted).all() or (shifted <= 0).any():
+                    raise FloatingPointError(f"CSAV requires E + C > 0 at iteration {iteration}")
+                if q is None:
+                    q = shifted.detach().clone()
+                row.update(r=q.item(), r_over_E_plus_C=(q / shifted).item(),
+                           modified_energy=q.item())
+            elif method == "naive_esav" and naive_esav_linearized:
                 if state is None:
                     state = {"r": energy.exp().detach()}
                 row.update(r=state["r"].item(),

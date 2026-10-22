@@ -86,6 +86,11 @@ def plot_experiment(input_dir, output):
             if config["scheme"] == "plan1":
                 label += f", eta = {config.get('eta', 1.0):g}"
         modified_label = r"$r^n$" if config.get("linearized") else r"$\log r^n$"
+    elif method == "csav":
+        label, modified_label = "CSAV", r"$r^n$"
+    elif method in ("inverse_sav", "pb_inverse_sav"):
+        label = "Inverse SAV" if method == "inverse_sav" else "PB-Inverse SAV"
+        modified_label = r"$1/r^n$"
     elif method in ("sav", "pb_sav"):
         label = "SAV" if method == "sav" else "PB-SAV"
         if config.get("relax", False):
@@ -127,7 +132,8 @@ def plot_comparison(input_dirs, output):
 
     has_auxiliary = any(
         any(key in rows[0] for key in (
-            "r_over_exp_E", "r_over_exp_auxiliary_energy", "q_over_Q",
+            "r_over_exp_E", "r_over_exp_auxiliary_energy", "q_over_Q", "r_over_E_plus_C",
+            "r_times_E_plus_C",
         )) for _, rows in experiments
     )
     fig, axes = plt.subplots(1, 2 if has_auxiliary else 1, figsize=(14, 6.2),
@@ -137,6 +143,8 @@ def plot_comparison(input_dirs, output):
     has_sav = False
     has_esav = False
     has_new_esav = False
+    has_csav = False
+    has_inverse = False
     signed_ratio = False
     ratio_min = float("inf")
     ratio_max = 0.0
@@ -155,6 +163,21 @@ def plot_comparison(input_dirs, output):
             marker_start = 10 if method != "adamw" else 30
             linewidth = 2.4 if method != "adamw" else 1.6
             ratio_key = None
+        elif method in ("inverse_sav", "pb_inverse_sav"):
+            label = "Inverse SAV" if method == "inverse_sav" else "PB-Inverse SAV"
+            color = "#8b3fb0" if method == "inverse_sav" else "#009e73"
+            style, marker = "-", "v" if method == "inverse_sav" else "D"
+            ratio_key = "r_times_E_plus_C"
+            shifts.add(config["total_shift"])
+            has_inverse = True
+        elif method == "csav":
+            label = "CSAV"
+            color, style, marker = "#8b3fb0", "-", "v"
+            marker_start = 5
+            linewidth = 2.4
+            ratio_key = "r_over_E_plus_C"
+            shifts.add(config["total_shift"])
+            has_csav = True
         elif method == "esav":
             label = esav_label(config)
             color, style, marker = "#009e73", "-", "D"
@@ -242,6 +265,10 @@ def plot_comparison(input_dirs, output):
         ratio_label += ("\n" if ratio_label else "") + (
             r"$r^n/[\exp(E(x^n))\sqrt{E(x^n)+C}]$ (ESAV)"
         )
+    if has_csav:
+        ratio_label += ("\n" if ratio_label else "") + r"$r^n/[E(x^n)+C]$ (CSAV)"
+    if has_inverse:
+        ratio_label += ("\n" if ratio_label else "") + r"$r^n[E(x^n)+C]$ (Inverse SAV/PB)"
     if has_auxiliary:
         axes[1].set(title="Auxiliary-variable ratio", ylabel=ratio_label)
         if signed_ratio:
@@ -309,8 +336,9 @@ def plot_modified_energy(input_dirs, output):
     fig, axes = plt.subplots(1, len(groups), figsize=(7 * len(groups), 6.2),
                              layout="constrained", squeeze=False)
     for axis, (lr, group) in zip(axes[0], groups.items()):
-        order = {"gd": 0, "sgd": 0, "adamw": 1, "sav": 2, "pb_sav": 3,
-                 "esav": 4, "naive_esav": 5, "pb_naive_esav": 6, "pb_esav": 7}
+        order = {"gd": 0, "sgd": 0, "adamw": 1, "csav": 2, "sav": 2, "pb_sav": 3,
+                 "esav": 4, "naive_esav": 5, "pb_naive_esav": 6, "pb_esav": 7,
+                 "inverse_sav": 8, "pb_inverse_sav": 9}
         group.sort(key=lambda item: order[item[0]["method"]])
         for config, rows in group:
             method = config["method"]
@@ -323,6 +351,14 @@ def plot_modified_energy(input_dirs, output):
                 )
                 style = "-"
                 energy_key = "objective"
+            elif method == "csav":
+                label = r"CSAV: $r^n$"
+                color, style, marker, start = "#8b3fb0", "-", "v", 5
+            elif method in ("inverse_sav", "pb_inverse_sav"):
+                label = "Inverse SAV" if method == "inverse_sav" else "PB-Inverse SAV"
+                label += r": $1/r^n$"
+                color = "#8b3fb0" if method == "inverse_sav" else "#009e73"
+                style, marker, start = "-", "D", 5
             elif method in ("sav", "pb_sav"):
                 label = "SAV" if method == "sav" else "PB-SAV"
                 label += r": $(q^n)^2$"
@@ -379,6 +415,9 @@ def plot_training_curves(input_dirs, output):
         ("gd", None): ("GD", "#333333", "-.", None),
         ("sgd", None): ("SGD", "#333333", "-.", None),
         ("adamw", None): ("AdamW", "#007c91", "-", None),
+        ("csav", None): ("CSAV", "#8b3fb0", "-", "v"),
+        ("inverse_sav", None): ("Inverse SAV", "#8b3fb0", "-", "v"),
+        ("pb_inverse_sav", None): ("PB-Inverse SAV", "#009e73", "-", "D"),
         ("esav", None): ("ESAV", "#009e73", "-", "D"),
         ("naive_esav", None): ("naiveESAV", "#d89b00", "-", None),
         ("pb_sav", None): ("PB-SAV", "#3568a8", "-", None),
