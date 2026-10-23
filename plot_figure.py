@@ -11,6 +11,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+MESAV_STYLES = {
+    "mesav": ("MESAV", "#60a5d1", "-", "o"),
+    "pb_mesav": ("PB-MESAV", "#1765ad", "-", "s"),
+    "relax_mesav": ("Relax-MESAV", "#9b6cc2", "--", "o"),
+    "relax_pb_mesav": ("Relax-PB-MESAV", "#663b94", "--", "s"),
+}
+
 
 def load_experiment(input_dir):
     input_dir = Path(input_dir)
@@ -79,7 +86,9 @@ def plot_experiment(input_dir, output):
     modified_key = "r" if config.get("linearized") else "modified_energy"
     modified = [float(row[modified_key]) for row in rows]
     method = config["method"]
-    if method in ("esav", "naive_esav", "pb_esav", "pb_naive_esav"):
+    if method in MESAV_STYLES:
+        label, modified_label = MESAV_STYLES[method][0], r"$\log r^n$"
+    elif method in ("esav", "naive_esav", "pb_esav", "pb_naive_esav"):
         label = esav_label(config)
         if method in ("pb_esav", "pb_naive_esav") and config.get("relax", False):
             label += " (relaxed)"
@@ -143,6 +152,7 @@ def plot_comparison(input_dirs, output):
     has_sav = False
     has_esav = False
     has_new_esav = False
+    has_mesav = False
     has_csav = False
     has_inverse = False
     signed_ratio = False
@@ -178,6 +188,11 @@ def plot_comparison(input_dirs, output):
             ratio_key = "r_over_E_plus_C"
             shifts.add(config["total_shift"])
             has_csav = True
+        elif method in MESAV_STYLES:
+            label, color, style, marker = MESAV_STYLES[method]
+            ratio_key = "r_over_exp_auxiliary_energy"
+            shifts.add(config["total_shift"])
+            has_mesav = True
         elif method == "esav":
             label = esav_label(config)
             color, style, marker = "#009e73", "-", "D"
@@ -267,6 +282,10 @@ def plot_comparison(input_dirs, output):
         )
     if has_csav:
         ratio_label += ("\n" if ratio_label else "") + r"$r^n/[E(x^n)+C]$ (CSAV)"
+    if has_mesav:
+        ratio_label += ("\n" if ratio_label else "") + (
+            r"$r^n/[\exp(E(x^n)/(E(x^0)+C))\sqrt{E(x^n)+C}]$ (MESAV/PB)"
+        )
     if has_inverse:
         ratio_label += ("\n" if ratio_label else "") + r"$r^n[E(x^n)+C]$ (Inverse SAV/PB)"
     if has_auxiliary:
@@ -339,6 +358,7 @@ def plot_modified_energy(input_dirs, output):
         order = {"gd": 0, "sgd": 0, "adamw": 1, "csav": 2, "sav": 2, "pb_sav": 3,
                  "esav": 4, "naive_esav": 5, "pb_naive_esav": 6, "pb_esav": 7,
                  "inverse_sav": 8, "pb_inverse_sav": 9}
+        order.update({method: 10 + index for index, method in enumerate(MESAV_STYLES)})
         group.sort(key=lambda item: order[item[0]["method"]])
         for config, rows in group:
             method = config["method"]
@@ -363,6 +383,10 @@ def plot_modified_energy(input_dirs, output):
                 label = "SAV" if method == "sav" else "PB-SAV"
                 label += r": $(q^n)^2$"
                 color, style, marker, start = "#0072b2", "--", "s", 15
+            elif method in MESAV_STYLES:
+                label, color, style, marker = MESAV_STYLES[method]
+                label += r": $\ln r^n$"
+                start = 0
             elif method == "esav":
                 label = r"ESAV: $\ln r^n$"
                 color, style, marker, start = "#009e73", "-", "D", 0
@@ -409,7 +433,7 @@ def plot_modified_energy(input_dirs, output):
 
 
 def plot_training_curves(input_dirs, output):
-    """Compare saved training objectives and noise-free test MSE histories."""
+    """Compare objectives, including historical test MSE only when every run records it."""
     experiments = [load_experiment(path) for path in input_dirs]
     styles = {
         ("gd", None): ("GD", "#333333", "-.", None),
@@ -426,7 +450,12 @@ def plot_training_curves(input_dirs, output):
         ("pb_naive_esav", "plan1"): ("PB-naiveESAV Plan 1", "#8953b1", "--", None),
         ("pb_naive_esav", "plan2"): ("PB-naiveESAV Plan 2", "#8c564b", ":", "s"),
     }
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.8), layout="constrained")
+    styles.update({(method, None): values for method, values in MESAV_STYLES.items()})
+    keys = ("objective", "test_mse") if all(
+        "test_mse" in rows[0] for _, rows in experiments
+    ) else ("objective",)
+    fig, axes = plt.subplots(1, len(keys), figsize=(11, 4.8), layout="constrained", squeeze=False)
+    axes = axes[0]
     for config, rows in experiments:
         style_method = config["method"]
         if style_method == "pb_esav" and esav_label(config).startswith("PB-naiveESAV"):
@@ -440,14 +469,15 @@ def plot_training_curves(input_dirs, output):
                 color, style, marker = "#008b8b", "--", "D"
         label += f" ($M={config['components']}$)"
         iterations = [int(row["iteration"]) for row in rows]
-        for axis, key in zip(axes, ("objective", "test_mse")):
+        for axis, key in zip(axes, keys):
             axis.plot(
                 iterations, [float(row[key]) for row in rows], label=label,
                 color=color, linestyle=style, linewidth=1.8, marker=marker,
                 markevery=60, markersize=5, markerfacecolor="none",
             )
-    axes[0].set(title="Training objective", ylabel=r"$F(\theta)$")
-    axes[1].set(title="Test error (noise-free target)", ylabel="Test MSE")
+    axes[0].set(title="Objective loss", ylabel=r"$E(\theta)$")
+    if len(keys) > 1:
+        axes[1].set(title="Test error (noise-free target)", ylabel="Test MSE")
     for axis in axes:
         axis.set_xlabel("Parameter updates")
         axis.grid(True, alpha=0.2)

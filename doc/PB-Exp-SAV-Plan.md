@@ -785,3 +785,87 @@ r^{n+1}
 $$
 
 两个更新的右端均只依赖 $x^n,r^n$，直接计算，**不对指数作一阶展开**。
+
+## 单能量 exponential 隐式辅助反馈（候选）
+
+$L=0$、$G=-I$，固定学习率 $\Delta t>0$；无 PB、Relax 或线搜索。
+
+$$
+r=\exp(E(x)),\qquad \log r^0=E(x^0),\qquad
+\frac{d\log r}{dt}=\nabla E(x)^\top\frac{dx}{dt}.
+$$
+
+$$
+\frac{dx}{dt}=-\frac{r}{\exp(E(x))}\nabla E(x),
+\qquad
+\frac{d}{dt}[\log r-E(x)]=0.
+$$
+
+**一阶离散**
+
+$$
+\begin{cases}
+\displaystyle
+\frac{x^{n+1}-x^n}{\Delta t}
+=-\frac{r^{n+1}}{\exp(E(x^n))}\nabla E(x^n),\\[6pt]
+\displaystyle
+\log r^{n+1}-\log r^n
+=\nabla E(x^n)^\top(x^{n+1}-x^n).
+\end{cases}
+$$
+
+**递推：先求标量根，再更新参数**
+
+$$
+\boxed{
+\log r^{n+1}
++\Delta t\,\exp(\log r^{n+1}-E(x^n))\|\nabla E(x^n)\|^2
+=\log r^n.
+}
+$$
+
+$$
+\boxed{
+x^{n+1}=x^n
+-\Delta t\,\exp(\log r^{n+1}-E(x^n))\nabla E(x^n).
+}
+$$
+
+**可解性与耗散**
+
+标量方程左侧关于 $\log r^{n+1}$ 严格递增、值域为 $\mathbb R$：
+
+$$
+1+\Delta t\,\exp(\log r^{n+1}-E(x^n))\|\nabla E(x^n)\|^2>0,
+\qquad 0<r^{n+1}\le r^n.
+$$
+
+$$
+\boxed{
+\begin{aligned}
+\log r^{n+1}-\log r^n
+&=-\Delta t\,\frac{r^{n+1}}{\exp(E(x^n))}\|\nabla E(x^n)\|^2\\
+&=-\frac{\exp(E(x^n))}{r^{n+1}}
+\frac{\|x^{n+1}-x^n\|^2}{\Delta t}\le0.
+\end{aligned}
+}
+$$
+
+**凸二次型的一致性偏差**
+
+$$
+\begin{aligned}
+\log r^{n+1}-E(x^{n+1})
+={}&\log r^n-E(x^n)\\
+&-\frac12(x^{n+1}-x^n)^\top\nabla^2E\,(x^{n+1}-x^n).
+\end{aligned}
+$$
+
+$$
+\log r^n-E(x^n)\le0,
+\qquad
+0<\frac{r^{n+1}}{\exp(E(x^n))}
+\le\frac{r^n}{\exp(E(x^n))}\le1.
+$$
+
+辅助耗散对任意正学习率成立；比值下界、后期停滞及优化性能另行验证。

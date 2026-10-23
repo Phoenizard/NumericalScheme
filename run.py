@@ -9,8 +9,8 @@ from pathlib import Path
 import torch
 
 from network.nonlinear_regression import TanhRegressor
-from optimizer import Inverse_sav, adamw, csav, esav, gd, naive_esav
-from optimizer import pb_esav, pb_naive_esav, pb_sav, sav, sgd
+from optimizer import Inverse_sav, adamw, esav, gd, mesav, naive_esav
+from optimizer import pb_esav, pb_mesav, pb_naive_esav, pb_sav, relax_mesav, sav, sgd
 from problem import nonlinear_regression, quadratic
 from problem.config import PROBLEMS
 from train import train
@@ -25,12 +25,18 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
     step_fn = {
         "gd": gd.step, "sav": sav.step, "pb_sav": pb_sav.step, "pb_esav": pb_esav.step,
         "pb_naive_esav": pb_naive_esav.step,
-        "esav": esav.step, "csav": csav.step,
+        "esav": esav.step, "csav": None,
+        "mesav": mesav.step, "pb_mesav": pb_mesav.step,
+        "relax_mesav": relax_mesav.step,
+        "relax_pb_mesav": partial(relax_mesav.step, pullback=True),
         "naive_esav": naive_esav.step, "sgd": sgd.step, "adamw": adamw.step,
         "inverse_sav": Inverse_sav.step,
         "pb_inverse_sav": partial(Inverse_sav.step, pullback=True),
     }[method]
+    if method == "csav":
+        from optimizer.csav import step as step_fn
     is_esav = method in ("pb_esav", "pb_naive_esav")
+    is_mesav = method in ("mesav", "pb_mesav", "relax_mesav", "relax_pb_mesav")
     if linearized and method != "naive_esav":
         raise ValueError("--linearized is only supported by the naiveESAV")
     if method == "gd" and problem != "nonlinear_regression":
@@ -40,9 +46,22 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
     scheme = (scheme or "plan1") if is_esav else None
     total_shift = settings["total_shift"] if method in (
         "sav", "csav", "esav", "pb_sav", "inverse_sav", "pb_inverse_sav",
+        "mesav", "pb_mesav", "relax_mesav", "relax_pb_mesav",
     ) else None
     curvature_shift = settings["total_shift"] if method == "pb_esav" else None
     relax = settings["relax"] if method not in ("gd", "sgd", "adamw") else False
+    if is_mesav:
+        relax = method.startswith("relax_")
+        step_fn = partial(step_fn, total_shift=total_shift)
+        config.update(
+            auxiliary_variant="modified_esav", auxiliary_state="log_r", modified_energy="log_r",
+            total_auxiliary="exp(E/(E_initial+C))*sqrt(E+C)",
+            reference_policy="frozen_initial_energy",
+        )
+        if relax:
+            config["relaxation_update"] = (
+                "log_r_next = min(E_next/(E_initial+C) + log(E_next+C)/2, log_r_old)"
+            )
     if method == "naive_esav" and linearized and relax:
         raise ValueError("Full Relax requires naiveESAV (linearized=False)")
     if method in ("inverse_sav", "pb_inverse_sav"):
@@ -77,7 +96,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             esav_variant="exp_log_energy", linearized=False,
             total_auxiliary="exp(E + 0.5 * log(E + C))",
             auxiliary_state="log_r", modified_energy="log_r",
-            source="doc/PB-Exp-SAV-Plan.md#单能量-esav",
+            source="doc/design/esav.md#单能量-esav",
         )
     elif method == "pb_naive_esav":
         config["esav_variant"] = "naive"
@@ -98,20 +117,22 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         config["optimizer_settings"] = {"momentum": 0.0, "weight_decay": 0.0}
     lr = settings["lr"]
     line_search = settings.get("line_search")
-    metrics_fn = None
+    if method == "adamw":
+        lr, line_search = settings["reference_baseline_lr"], None
     name = method + (f"_{scheme}" if scheme is not None else "")
     if linearized:
         name += "_linearized"
 
     if problem == "nonlinear_regression":
-        line_search = settings["line_search"]
         if method == "sav" or loss is not None:
             raise ValueError(
                 "Use GD/PB-SAV/PB-ESAV/PB-naiveESAV with --m; --loss is only for quadratic"
             )
         if m not in (1, 2, 4, 8, 15, 16, 30):
             raise ValueError("Specify --m from 1, 2, 4, 8, 15, 16, 30")
-        if method in ("csav", "esav", "naive_esav", "inverse_sav") and m != 1:
+        single_energy_methods = ("csav", "esav", "naive_esav", "inverse_sav",
+                                 "mesav", "relax_mesav")
+        if method in single_energy_methods and m != 1:
             raise ValueError("Single-energy methods require --m 1")
         data_path = root / settings["data_path"]
         data = torch.load(data_path, map_location=settings["device"], weights_only=True)
@@ -119,7 +140,6 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         x, y = data["x_train"].to(dtype), data["y_train"].to(dtype)
         order = x[:, 0].argsort()
         x, y = x[order], y[order]
-        x_test, y_test = data["x_test"].to(dtype), data["y_test"].to(dtype)
         groups = nonlinear_regression.make_groups(len(x), m, settings["partition_seed"])
         model = TanhRegressor(settings)
         parameters = tuple(model.parameters())
@@ -127,16 +147,13 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             nonlinear_regression.split_energy_loss, model, x, y, groups,
             lambda_reg=settings["lambda_reg"],
         )
-        metrics_fn = lambda: {
-            "test_mse": nonlinear_regression.test_mse(model, x_test, y_test),
-        }
         loss = "split"
         name += f"_m{m}"
         # Record the loaded data's settings rather than a later edit to the data configuration.
         config.update(data["config"])
         config.update(
             model="tanh", data=str(data_path), data_config=data["config"],
-            n_train=len(x), n_test=len(x_test), batch_size=len(x), components=m,
+            n_train=len(x), batch_size=len(x), components=m,
             dimension=sum(p.numel() for p in parameters), initial_value=None,
             output_init_bound=settings["hidden_width"] ** -0.5,
             line_search=line_search,
@@ -144,12 +161,14 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             grouping="nested_random_bisection", group_indices=[group.tolist() for group in groups],
             reproduction_status="declared_defaults_not_exact_author_replication",
         )
+        config.pop("n_test", None)
     else:
         if m is not None:
             raise ValueError("--m is only used by nonlinear_regression")
         loss = loss or (
             "total" if method in (
                 "csav", "esav", "naive_esav", "inverse_sav", "sgd", "adamw",
+                "mesav", "relax_mesav",
             ) else "split"
         )
         x = quadratic.init_parameters(settings)
@@ -164,13 +183,22 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         config.update(
             model="none", data=None,
             components=2 if method not in (
-                "sav", "csav", "esav", "naive_esav", "inverse_sav"
+                "sav", "csav", "esav", "naive_esav", "inverse_sav", "mesav", "relax_mesav",
             ) and loss == "split" else 1,
             line_search=line_search,
             step_policy="fixed" if line_search is None else "armijo_lr_reset",
         )
 
-    if relax:
+    if is_mesav:
+        initializer = pb_mesav if method in ("pb_mesav", "relax_pb_mesav") else mesav
+        with torch.no_grad():
+            initial_state = initializer.initialize(loss_fn(), total_shift)
+        config.update(
+            reference_energy=initial_state["reference_energy"].item(),
+            reference_components=initial_state["reference_components"].tolist()
+            if "reference_components" in initial_state else None,
+        )
+    if relax and not method.startswith("relax_"):
         name += "_relaxed"
     config.update(
         problem=problem, method=method, loss=loss, total_shift=total_shift, relax=relax,
@@ -192,7 +220,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         train(
             parameters, loss_fn, step_fn, steps=settings["steps"], lr=lr,
             total_shift=total_shift, relax=relax, esav_scheme=scheme,
-            metrics_fn=metrics_fn, method=method, line_search=line_search, history=history,
+            method=method, line_search=line_search, history=history,
             curvature_shift=curvature_shift,
             naive_esav_linearized=linearized,
         )
@@ -206,8 +234,6 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
                 writer.writeheader()
                 writer.writerows(history)
     print(f"{name}: final objective = {history[-1]['objective']:.8e}")
-    if metrics_fn is not None:
-        print(f"  Test MSE: {history[-1]['test_mse']:.8e}")
     print(f"  Results: {output.resolve()}")
     return history
 
@@ -221,6 +247,7 @@ def main():
             "gd", "sgd", "adamw", "sav", "csav", "esav", "naive_esav", "pb_sav",
             "pb_esav", "pb_naive_esav",
             "inverse_sav", "pb_inverse_sav",
+            "mesav", "pb_mesav", "relax_mesav", "relax_pb_mesav",
         ],
         default="pb_sav",
     )
