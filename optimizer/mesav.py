@@ -19,6 +19,17 @@ def initialize(terms, total_shift: float) -> dict:
     }
 
 
+def _relaxed_log_r(loss_fn, state: dict, total_shift: float):
+    """Correct total log_r using the new energy and the unchanged old state."""
+    with torch.no_grad():
+        terms = loss_fn()
+        energy = terms if isinstance(terms, torch.Tensor) else sum(terms)
+        if not torch.isfinite(energy) or energy + total_shift <= 0:
+            raise FloatingPointError("Relax-MESAV requires finite positive E_next+C")
+        target = energy / state["reference_energy"] + 0.5 * (energy + total_shift).log()
+        return torch.minimum(target, state["log_r"]).detach()
+
+
 def step(parameters, loss_fn, state: dict, lr: float, *, total_shift: float,
          relax: bool = False) -> dict:
     """Update parameters in place; return a detached state without changing its input.
@@ -26,14 +37,13 @@ def step(parameters, loss_fn, state: dict, lr: float, *, total_shift: float,
     Only the total energy and its first gradient enter the update. The parameter
     feedback is linearized in the log auxiliary increment; logaddexp evaluates
     the equivalent scalar denominator without subtractive cancellation.
-    For E+C>0 and lr>0, -1 < log_r_next-log_r <= 0 independently of line search.
+    Without Relax, E+C>0 and lr>0 imply -1 < log_r_next-log_r <= 0 without line search.
+    Optional Relax replaces log_r_next using the new total energy and old log_r.
     """
     if not math.isfinite(lr) or lr <= 0:
         raise ValueError("MESAV lr must be finite and positive")
     if not math.isfinite(total_shift) or total_shift <= 0:
         raise ValueError("MESAV total_shift must be finite and positive")
-    if relax:
-        raise ValueError("Use optimizer.relax_mesav for Relax")
     parameters = tuple(parameters)
     terms = loss_fn()
     energy = terms if isinstance(terms, torch.Tensor) else sum(terms)
@@ -74,4 +84,6 @@ def step(parameters, loss_fn, state: dict, lr: float, *, total_shift: float,
             raise FloatingPointError("Non-finite MESAV candidate parameters")
         for parameter, candidate in zip(parameters, candidates):
             parameter.copy_(candidate)
+    if relax:
+        next_log_r = _relaxed_log_r(loss_fn, state, total_shift)
     return {"log_r": next_log_r.detach(), "reference_energy": reference.clone()}

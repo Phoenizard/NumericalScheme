@@ -1,5 +1,7 @@
 # MESAV、PB-MESAV 与 Relax
 
+> 当前仅保留为实验记录和比较对象，不作为正式候选。针对本构造的动机与复杂性的质疑，不推广为所有 exponential 方案的不可替代性要求。科研评价边界见 [科研目标](../../GOAL.md#每次构造后的科研反思)；以下保留原有推导。
+
 ## 定义与假设
 
 $$
@@ -448,7 +450,9 @@ $$
 | --- | --- |
 | MESAV | [mesav.py](../../optimizer/mesav.py) |
 | PB-MESAV | [pb_mesav.py](../../optimizer/pb_mesav.py) |
-| 两种 Relax | [relax_mesav.py](../../optimizer/relax_mesav.py) |
+| 两种 Relax | 上述基础 / PB 模块的 `step(..., relax=True)` |
+
+`relax` 默认关闭；命令行使用 `--method mesav/pb_mesav` 加 `--relax` 开启。
 
 只使用能量及一阶导数。$\mathbf B^n$ 来自辅助变量的一阶模型，不计算 Hessian。
 本页证明的是 $\log r$ 的无条件非增，不以此代替真实目标收敛证明。

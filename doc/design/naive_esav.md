@@ -446,4 +446,4 @@ $$
 
 辅助耗散对任意正学习率成立；比值下界、后期停滞及优化性能另行验证。
 
-曲率信息的对照见 [ESAV Notes](esav.md#noteshessian-信息与-sav-对照)。
+曲率信息的历史对照见 [旧版 ESAV Notes](esav_legacy.md#noteshessian-信息与-sav-对照)。

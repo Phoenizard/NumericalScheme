@@ -44,14 +44,13 @@ def step(parameters, loss_fn, state: dict, lr: float, *, total_shift: float,
     B = V V.T, where V_i = sqrt(1/A_i + 1/(2*(E_i+C/M))) * grad(E_i)
     and A_i = E_i_initial+C/M stays frozen. Solve the M-by-M Gram system,
     avoiding subtraction of nearly equal Woodbury terms. M=1 calls MESAV
-    directly. No local auxiliary states or second derivatives are evolved.
+    directly. Optional Relax corrects only the total log_r after the step.
+    No local auxiliary states or second derivatives are evolved.
     """
     if not math.isfinite(lr) or lr <= 0:
         raise ValueError("PB-MESAV lr must be finite and positive")
     if not math.isfinite(total_shift) or total_shift <= 0:
         raise ValueError("PB-MESAV total_shift must be finite and positive")
-    if relax:
-        raise ValueError("Use optimizer.relax_mesav with pullback=True for Relax")
     parameters = tuple(parameters)
     terms = loss_fn()
     terms = [terms] if isinstance(terms, torch.Tensor) else list(terms)
@@ -62,6 +61,8 @@ def step(parameters, loss_fn, state: dict, lr: float, *, total_shift: float,
             parameters, lambda: terms[0], state, lr, total_shift=total_shift,
         )
         next_state["reference_components"] = state["reference_components"].detach().clone()
+        if relax:
+            next_state["log_r"] = mesav._relaxed_log_r(loss_fn, state, total_shift)
         return next_state
 
     shifted = torch.stack([term.detach() for term in terms]) + total_shift / len(terms)
@@ -109,5 +110,7 @@ def step(parameters, loss_fn, state: dict, lr: float, *, total_shift: float,
             raise FloatingPointError("Non-finite PB-MESAV candidate parameters")
         for parameter, candidate in zip(parameters, candidates):
             parameter.copy_(candidate)
+    if relax:
+        next_log_r = mesav._relaxed_log_r(loss_fn, state, total_shift)
     return {"log_r": next_log_r.detach(), "reference_energy": reference.clone(),
             "reference_components": references.clone()}
