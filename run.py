@@ -9,15 +9,15 @@ from pathlib import Path
 import torch
 
 from network.nonlinear_regression import TanhRegressor
-from optimizer import Inverse_sav, adamw, esav, gd, mesav, naive_esav
-from optimizer import pb_esav, pb_mesav, pb_naive_esav, pb_sav, relax_mesav, sav, sgd
+from optimizer import Inverse_sav, adamw, besav, esav, gd, mesav, naive_esav
+from optimizer import pb_besav, pb_esav, pb_mesav, pb_naive_esav, pb_sav, sav, sgd
 from problem import nonlinear_regression, quadratic
 from problem.config import PROBLEMS
 from train import train
 
 
 def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
-                   m=None, loss=None, output=None, linearized=False):
+                   m=None, loss=None, output=None, linearized=False, relax: bool | None = None):
     """Assemble one problem and optimizer, then save configuration and history."""
     settings = PROBLEMS[problem]
     config = settings.copy()
@@ -26,32 +26,51 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         "gd": gd.step, "sav": sav.step, "pb_sav": pb_sav.step, "pb_esav": pb_esav.step,
         "pb_naive_esav": pb_naive_esav.step,
         "esav": esav.step, "csav": None,
+        "besav": besav.step, "pb_besav": pb_besav.step,
         "mesav": mesav.step, "pb_mesav": pb_mesav.step,
-        "relax_mesav": relax_mesav.step,
-        "relax_pb_mesav": partial(relax_mesav.step, pullback=True),
         "naive_esav": naive_esav.step, "sgd": sgd.step, "adamw": adamw.step,
         "inverse_sav": Inverse_sav.step,
         "pb_inverse_sav": partial(Inverse_sav.step, pullback=True),
     }[method]
     if method == "csav":
         from optimizer.csav import step as step_fn
-    is_esav = method in ("pb_esav", "pb_naive_esav")
-    is_mesav = method in ("mesav", "pb_mesav", "relax_mesav", "relax_pb_mesav")
+    is_esav = method in ("esav", "pb_esav")
+    is_besav = method in ("besav", "pb_besav")
+    is_mesav = method in ("mesav", "pb_mesav")
     if linearized and method != "naive_esav":
         raise ValueError("--linearized is only supported by the naiveESAV")
     if method == "gd" and problem != "nonlinear_regression":
         raise ValueError("The GD baseline is currently configured for nonlinear_regression only")
-    if scheme is not None and not is_esav:
-        raise ValueError("--scheme is only used by PB-ESAV / PB-naiveESAV")
-    scheme = (scheme or "plan1") if is_esav else None
+    if scheme is not None and method != "pb_naive_esav":
+        raise ValueError("--scheme is only used by PB-naiveESAV")
+    scheme = (scheme or "plan1") if method == "pb_naive_esav" else None
     total_shift = settings["total_shift"] if method in (
-        "sav", "csav", "esav", "pb_sav", "inverse_sav", "pb_inverse_sav",
-        "mesav", "pb_mesav", "relax_mesav", "relax_pb_mesav",
+        "sav", "csav", "pb_sav", "inverse_sav", "pb_inverse_sav",
+        "mesav", "pb_mesav",
     ) else None
-    curvature_shift = settings["total_shift"] if method == "pb_esav" else None
-    relax = settings["relax"] if method not in ("gd", "sgd", "adamw") else False
+    if relax is None:
+        relax = settings["relax"] if method not in ("gd", "sgd", "adamw") else False
+    elif relax and method in ("gd", "sgd", "adamw"):
+        raise ValueError(f"{method} does not use Relax")
+    if is_besav:
+        config.update(
+            total_auxiliary="exp(E/(E+E0))", auxiliary_state="log_r",
+            modified_energy="log_r", reference_policy="frozen_initial_energy",
+        )
+        if method == "pb_besav":
+            config["B_definition"] = "sum_i E_i0/(E_i+E_i0)^2 * grad(E_i) grad(E_i).T"
+        if relax:
+            config["relaxation_update"] = "log_r_next = min(E_next/(E_next+E0), log_r_old)"
+    if is_esav:
+        config.update(
+            total_auxiliary="exp(E/(4*E0))", auxiliary_state="log_r",
+            modified_energy="4*E0*log_r", reference_policy="frozen_initial_energy",
+        )
+        if method == "pb_esav":
+            config["B_definition"] = "sum_i grad(E_i) grad(E_i).T / (4*E_i0)"
+        if relax:
+            config["relaxation_update"] = "log_r_next = min(E_next/(4*E0), log_r_old)"
     if is_mesav:
-        relax = method.startswith("relax_")
         step_fn = partial(step_fn, total_shift=total_shift)
         config.update(
             auxiliary_variant="modified_esav", auxiliary_state="log_r", modified_energy="log_r",
@@ -72,31 +91,12 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             source="optimizer/InverseSAV.py",
             pullback="centered_component_covariance" if method == "pb_inverse_sav" else None,
         )
-    elif method == "pb_esav":
-        if relax:
-            raise ValueError("PB-ESAV does not support Relax; historical Relax uses pb_naive_esav")
-        step_fn = partial(step_fn, curvature_shift=curvature_shift)
-        config.update(
-            esav_variant="exp_log_energy", curvature_shift=curvature_shift,
-            total_auxiliary="exp(sum(E_i))",
-            local_auxiliary="exp(E_i + 0.5 * log(E_i + C/M))",
-        )
     elif method == "csav":
         if relax:
             raise ValueError("CSAV does not use post-step Relax")
         config.update(
             auxiliary_variant="recovery_bounded_feedback", total_auxiliary="E + C",
             auxiliary_state="r", modified_energy="r", source="optimizer/csav.py",
-        )
-    elif method == "esav":
-        if relax:
-            raise ValueError("ESAV implements the non-relaxed scheme only")
-        step_fn = partial(step_fn, total_shift=total_shift)
-        config.update(
-            esav_variant="exp_log_energy", linearized=False,
-            total_auxiliary="exp(E + 0.5 * log(E + C))",
-            auxiliary_state="log_r", modified_energy="log_r",
-            source="doc/design/esav.md#单能量-esav",
         )
     elif method == "pb_naive_esav":
         config["esav_variant"] = "naive"
@@ -130,8 +130,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             )
         if m not in (1, 2, 4, 8, 15, 16, 30):
             raise ValueError("Specify --m from 1, 2, 4, 8, 15, 16, 30")
-        single_energy_methods = ("csav", "esav", "naive_esav", "inverse_sav",
-                                 "mesav", "relax_mesav")
+        single_energy_methods = ("csav", "esav", "naive_esav", "inverse_sav", "mesav", "besav")
         if method in single_energy_methods and m != 1:
             raise ValueError("Single-energy methods require --m 1")
         data_path = root / settings["data_path"]
@@ -167,8 +166,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             raise ValueError("--m is only used by nonlinear_regression")
         loss = loss or (
             "total" if method in (
-                "csav", "esav", "naive_esav", "inverse_sav", "sgd", "adamw",
-                "mesav", "relax_mesav",
+                "csav", "esav", "naive_esav", "inverse_sav", "sgd", "adamw", "mesav", "besav",
             ) else "split"
         )
         x = quadratic.init_parameters(settings)
@@ -178,19 +176,36 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             "total": quadratic.total_energy_loss,
         }[loss]
         loss_fn = partial(energy_fn, x, settings)
-        if not is_esav or loss == "total":
+        if method != "pb_naive_esav" or loss == "total":
             name += f"_{loss}"
         config.update(
             model="none", data=None,
             components=2 if method not in (
-                "sav", "csav", "esav", "naive_esav", "inverse_sav", "mesav", "relax_mesav",
+                "sav", "csav", "esav", "naive_esav", "inverse_sav", "mesav", "besav",
             ) and loss == "split" else 1,
             line_search=line_search,
             step_policy="fixed" if line_search is None else "armijo_lr_reset",
         )
 
+    if is_besav:
+        initializer = pb_besav if method == "pb_besav" else besav
+        with torch.no_grad():
+            initial_state = initializer.initialize(loss_fn())
+        config.update(
+            initial_energy=initial_state["initial_energy"].item(),
+            initial_components=initial_state["initial_components"].tolist(),
+        )
+    if is_esav:
+        initializer = pb_esav if method == "pb_esav" else esav
+        with torch.no_grad():
+            initial_state = initializer.initialize(loss_fn())
+        config.update(
+            initial_energy=initial_state["initial_energy"].item(),
+            initial_components=initial_state["initial_components"].tolist()
+            if "initial_components" in initial_state else None,
+        )
     if is_mesav:
-        initializer = pb_mesav if method in ("pb_mesav", "relax_pb_mesav") else mesav
+        initializer = pb_mesav if method == "pb_mesav" else mesav
         with torch.no_grad():
             initial_state = initializer.initialize(loss_fn(), total_shift)
         config.update(
@@ -198,16 +213,16 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             reference_components=initial_state["reference_components"].tolist()
             if "reference_components" in initial_state else None,
         )
-    if relax and not method.startswith("relax_"):
+    if relax:
         name += "_relaxed"
     config.update(
         problem=problem, method=method, loss=loss, total_shift=total_shift, relax=relax,
         device=str(parameters[0].device), dtype=str(parameters[0].dtype),
         momentum=method == "adamw", lr=lr, torch_version=str(torch.__version__),
     )
-    if is_esav:
+    if method == "pb_naive_esav":
         config.update(scheme=scheme, modified_energy="log_r")
-        if scheme == "plan1" and settings["relax"]:
+        if scheme == "plan1" and relax:
             config["eta"] = 1.0
 
     output = Path(output) if output is not None else root / "results" / problem / name
@@ -221,7 +236,6 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             parameters, loss_fn, step_fn, steps=settings["steps"], lr=lr,
             total_shift=total_shift, relax=relax, esav_scheme=scheme,
             method=method, line_search=line_search, history=history,
-            curvature_shift=curvature_shift,
             naive_esav_linearized=linearized,
         )
     except FloatingPointError as error:
@@ -245,16 +259,17 @@ def main():
         "--method",
         choices=[
             "gd", "sgd", "adamw", "sav", "csav", "esav", "naive_esav", "pb_sav",
-            "pb_esav", "pb_naive_esav",
-            "inverse_sav", "pb_inverse_sav",
-            "mesav", "pb_mesav", "relax_mesav", "relax_pb_mesav",
+            "pb_esav", "pb_naive_esav", "besav", "pb_besav",
+            "inverse_sav", "pb_inverse_sav", "mesav", "pb_mesav",
         ],
         default="pb_sav",
     )
+    parser.add_argument("--relax", action=argparse.BooleanOptionalAction, default=None,
+                        help="Enable/disable Relax (default: problem configuration)")
     parser.add_argument("--linearized", action="store_true",
                         help="Use a first-order Taylor expansion only in the naiveESAV r update")
     parser.add_argument("--scheme", choices=["plan1", "plan2"],
-                        help="PB-ESAV / PB-naiveESAV scheme (default: plan1)")
+                        help="PB-naiveESAV scheme (default: plan1)")
     parser.add_argument("--m", type=int, choices=[1, 2, 4, 8, 15, 16, 30],
                         help="Number of nonlinear-regression energy components")
     parser.add_argument("--loss", choices=["split", "total"],

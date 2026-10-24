@@ -4,7 +4,7 @@ import math
 
 import torch
 
-from optimizer import mesav, pb_mesav
+from optimizer import besav, esav, mesav, pb_besav, pb_esav, pb_mesav
 
 
 def _armijo_step(parameters, loss_fn, update_fn, initial_lr, settings, iteration):
@@ -79,9 +79,13 @@ def _armijo_step(parameters, loss_fn, update_fn, initial_lr, settings, iteration
 
 def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
           total_shift=None, relax=False, *, esav_scheme=None, eta=None, metrics_fn=None,
-          method=None, line_search=None, history=None, curvature_shift=None,
+          method=None, line_search=None, history=None,
           naive_esav_linearized=False):
     """Record initial/accepted states; rejected trials do not consume the update budget."""
+    is_esav = method in ("esav", "pb_esav")
+    is_besav = method in ("besav", "pb_besav")
+    if (is_esav or is_besav) and (esav_scheme is not None or total_shift is not None):
+        raise ValueError("ESAV/BESAV uses frozen initial energies, without a Plan or total_shift")
     if eta is not None:
         if esav_scheme != "plan1" or not relax:
             raise ValueError("eta is only supported by relaxed PB-naiveESAV Plan 1")
@@ -92,10 +96,12 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
             raise ValueError(f"Unsupported ESAV scheme: {esav_scheme}")
         if total_shift is not None:
             raise ValueError("ESAV auxiliary energies do not use total_shift")
-    elif method not in ("gd", "sgd", "adamw", "naive_esav"):
+    elif not (is_esav or is_besav) and method not in ("gd", "sgd", "adamw", "naive_esav"):
         total_shift = 1e-10 if total_shift is None else total_shift
-    is_mesav = method in ("mesav", "pb_mesav", "relax_mesav", "relax_pb_mesav")
-    has_esav_state = is_mesav or esav_scheme is not None or method in ("esav", "naive_esav")
+    is_mesav = method in ("mesav", "pb_mesav")
+    has_esav_state = (
+        is_esav or is_besav or is_mesav or esav_scheme is not None or method == "naive_esav"
+    )
     if line_search is not None:
         if not all(math.isfinite(value) for value in (lr, *line_search.values())):
             raise ValueError("Line-search settings must be finite")
@@ -146,7 +152,7 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                 if not torch.isfinite(shifted) or shifted <= 0:
                     raise FloatingPointError(f"MESAV requires E+C>0 at iteration {iteration}")
                 if state is None:
-                    initializer = pb_mesav if method in ("pb_mesav", "relax_pb_mesav") else mesav
+                    initializer = pb_mesav if method == "pb_mesav" else mesav
                     state = initializer.initialize(terms, total_shift)
                 auxiliary_energy = energy / state["reference_energy"] + 0.5 * shifted.log()
                 row.update(
@@ -154,17 +160,33 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                     r_over_exp_auxiliary_energy=(state["log_r"] - auxiliary_energy).exp().item(),
                     modified_energy=state["log_r"].item(),
                 )
-            elif method == "esav":
-                shifted = energy + total_shift
-                if not torch.isfinite(shifted).all() or (shifted <= 0).any():
-                    raise FloatingPointError(f"ESAV requires E + C > 0 at iteration {iteration}")
-                auxiliary_energy = energy + 0.5 * shifted.log()
+            elif is_besav:
+                if not torch.isfinite(energy) or energy < 0:
+                    raise FloatingPointError(
+                        f"BESAV requires finite E >= 0 at iteration {iteration}"
+                    )
                 if state is None:
-                    state = {"log_r": auxiliary_energy.detach().clone()}
+                    initializer = pb_besav if method == "pb_besav" else besav
+                    state = initializer.initialize(terms)
+                auxiliary_energy, _ = besav.log_definition(energy, state["initial_energy"])
                 row.update(
                     log_r=state["log_r"].item(),
                     r_over_exp_auxiliary_energy=(state["log_r"] - auxiliary_energy).exp().item(),
                     modified_energy=state["log_r"].item(),
+                )
+            elif is_esav:
+                if not torch.isfinite(energy) or energy < 0:
+                    raise FloatingPointError(
+                        f"ESAV requires finite E >= 0 at iteration {iteration}"
+                    )
+                if state is None:
+                    initializer = pb_esav if method == "pb_esav" else esav
+                    state = initializer.initialize(terms)
+                auxiliary_energy = energy / (4 * state["initial_energy"])
+                row.update(
+                    log_r=state["log_r"].item(),
+                    r_over_exp_auxiliary_energy=(state["log_r"] - auxiliary_energy).exp().item(),
+                    modified_energy=(4 * state["initial_energy"] * state["log_r"]).item(),
                 )
             elif not has_esav_state and method not in ("gd", "sgd", "adamw"):
                 Q = (energy + total_shift).sqrt()
@@ -175,10 +197,6 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
             elif has_esav_state:
                 energies = torch.stack([energy] if method == "naive_esav" else terms)
                 local_energy = energies
-                if esav_scheme == "plan2" and curvature_shift is not None:
-                    local_energy = energies + 0.5 * (
-                        energies + curvature_shift / len(terms)
-                    ).log()
                 if state is None:
                     state = {"log_r": energy.detach().clone()}
                     if esav_scheme == "plan2":
@@ -189,11 +207,10 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                 for i, value in enumerate(energies, start=1):
                     row[f"energy_{i}"] = value.item()
                 if esav_scheme == "plan2":
-                    ratio_name = "auxiliary_energy" if curvature_shift is not None else "E"
                     for i, (log_r_i, value) in enumerate(
                             zip(state["log_r_i"], local_energy), start=1):
                         row[f"log_r_{i}"] = log_r_i.item()
-                        row[f"r_{i}_over_exp_{ratio_name}_{i}"] = (log_r_i - value).exp().item()
+                        row[f"r_{i}_over_exp_E_{i}"] = (log_r_i - value).exp().item()
             if metrics_fn is not None:
                 row.update(metrics_fn())
             if line_search is not None:
@@ -208,7 +225,7 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                 def trial_update(trial_lr):
                     if method in ("gd", "sgd"):
                         return step_fn(parameters, loss_fn, trial_lr)
-                    if is_mesav or method in ("esav", "naive_esav"):
+                    if is_esav or is_besav or is_mesav or method == "naive_esav":
                         return step_fn(parameters, loss_fn, state, trial_lr, relax=relax)
                     if method == "adamw":
                         return step_fn(parameters, loss_fn, state, trial_lr)
@@ -230,7 +247,7 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                     state = accepted_state
             elif method in ("gd", "sgd"):
                 step_fn(parameters, loss_fn, lr)
-            elif is_mesav or method in ("esav", "naive_esav"):
+            elif is_esav or is_besav or is_mesav or method == "naive_esav":
                 state = step_fn(parameters, loss_fn, state, lr, relax=relax)
             elif method == "adamw":
                 state = step_fn(parameters, loss_fn, state, lr)

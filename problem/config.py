@@ -17,7 +17,7 @@ PROBLEMS = {
             "shrink": 0.5,
             "armijo_c": 1e-4,
         },
-        # 算法：SAV / ESAV / PB-SAV 的总 shift；PB-ESAV 用于局部辅助变量
+        # SAV 系列的总 shift；ESAV / PB-ESAV 使用冻结初始能量，不使用 shift
         "total_shift": 1e-10,
         "adamw": {"betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0},
         "reference_baseline_lr": 0.1,  # Fixed-rate SGD/AdamW reference in inverse-SAV research.
@@ -52,7 +52,7 @@ PROBLEMS = {
             "shrink": 0.5,
             "armijo_c": 1e-4,
         },
-        # 算法：SAV / PB-SAV 的总 shift；PB-ESAV 用于局部对数能量与曲率分母
+        # SAV 系列的总 shift；ESAV / PB-ESAV 使用冻结初始能量，不使用 shift
         "total_shift": 1e-10,
         "adamw": {"betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0},
         "reference_baseline_lr": 0.1,

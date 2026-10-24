@@ -11,6 +11,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+ESAV_STYLES = {
+    "esav": ("ESAV", "#009e73", "-", "D"),
+    "pb_esav": ("PB-ESAV", "#218c60", "-", "s"),
+    "relax_esav": ("Relax-ESAV", "#b3448c", "--", "D"),
+    "relax_pb_esav": ("Relax-PB-ESAV", "#663b94", "--", "s"),
+}
+
 MESAV_STYLES = {
     "mesav": ("MESAV", "#60a5d1", "-", "o"),
     "pb_mesav": ("PB-MESAV", "#1765ad", "-", "s"),
@@ -18,17 +25,35 @@ MESAV_STYLES = {
     "relax_pb_mesav": ("Relax-PB-MESAV", "#663b94", "--", "s"),
 }
 
+BESAV_STYLES = {
+    "besav": ("BESAV", "#006d9c", "-", "D"),
+    "pb_besav": ("PB-BESAV", "#006d9c", "-", "s"),
+    "relax_besav": ("Relax-BESAV", "#ad477b", "--", "D"),
+    "relax_pb_besav": ("Relax-PB-BESAV", "#ad477b", "--", "s"),
+}
+
 
 def load_experiment(input_dir):
     input_dir = Path(input_dir)
     config = json.loads((input_dir / "config.json").read_text(encoding="utf-8"))
-    # Read historical names without changing saved configurations or numerical records.
-    if config["method"] == "esav" and config.get("esav_variant") != "exp_log_energy":
-        config["method"] = "naive_esav"
     with (input_dir / "history.csv").open(newline="", encoding="utf-8") as file:
         rows = list(csv.DictReader(file))
     if not rows:
         raise ValueError("The experiment history is empty")
+    # Interpret archived names and diagnostic columns without rewriting raw files.
+    aliases = {
+        "bounded_exp": "besav", "pb_bounded_exp": "pb_besav",
+        "relax_pb_bounded_exp": "relax_pb_besav",
+    }
+    config["method"] = aliases.get(config["method"], config["method"])
+    if config.get("relax") and config["method"] in (
+        "esav", "pb_esav", "besav", "pb_besav", "mesav", "pb_mesav",
+    ):
+        config["method"] = "relax_" + config["method"]
+    if config["method"] in BESAV_STYLES:
+        for row in rows:
+            if "r_over_exp_auxiliary_energy" not in row and "auxiliary_ratio" in row:
+                row["r_over_exp_auxiliary_energy"] = row["auxiliary_ratio"]
     return config, rows
 
 
@@ -43,25 +68,14 @@ def step_label(config):
 
 
 def esav_label(config):
-    """Distinguish naiveESAV, PB-ESAV, and historical diagnostic records."""
-    if config["method"] == "esav":
-        return "ESAV"
+    """Use the current ESAV names; Plan numbers belong only to PB-naiveESAV."""
+    if config["method"] in ESAV_STYLES:
+        return ESAV_STYLES[config["method"]][0]
     if config["method"] == "naive_esav":
         if config.get("linearized"):
             return "naiveESAV (linearized r)"
         return "naiveESAV (relaxed)" if config.get("relax") else "naiveESAV"
-    variant = config.get("esav_variant")
-    diagnostic = config.get("debug_curvature", "")
-    if variant == "exp_log_energy":
-        name = "PB-ESAV"
-    elif variant == "sqrt_energy" or diagnostic.startswith("Square-root energy pullback"):
-        name = "PB-ESAV (former sqrt scheme)"
-    elif diagnostic:
-        name = "PB-ESAV (residual diagnostic)"
-    else:
-        # Early PB-naiveESAV records used method=pb_esav without a variant tag.
-        name = "PB-naiveESAV"
-    return f"{name} Plan {config['scheme'][-1]}"
+    return f"PB-naiveESAV Plan {config['scheme'][-1]}"
 
 
 def set_objective_scale(axis, values):
@@ -86,11 +100,15 @@ def plot_experiment(input_dir, output):
     modified_key = "r" if config.get("linearized") else "modified_energy"
     modified = [float(row[modified_key]) for row in rows]
     method = config["method"]
-    if method in MESAV_STYLES:
+    if method in BESAV_STYLES:
+        label, modified_label = BESAV_STYLES[method][0], r"$\log r^n$"
+    elif method in MESAV_STYLES:
         label, modified_label = MESAV_STYLES[method][0], r"$\log r^n$"
-    elif method in ("esav", "naive_esav", "pb_esav", "pb_naive_esav"):
+    elif method in ESAV_STYLES:
+        label, modified_label = esav_label(config), r"$4E^0\log r^n$"
+    elif method in ("naive_esav", "pb_naive_esav"):
         label = esav_label(config)
-        if method in ("pb_esav", "pb_naive_esav") and config.get("relax", False):
+        if method == "pb_naive_esav" and config.get("relax", False):
             label += " (relaxed)"
             if config["scheme"] == "plan1":
                 label += f", eta = {config.get('eta', 1.0):g}"
@@ -131,8 +149,8 @@ def plot_comparison(input_dirs, output):
     if any(config["problem"] == "nonlinear_regression" for config, _ in experiments):
         return plot_training_curves(input_dirs, output)
     reference = experiments[0][0]
-    shared = ("problem", "dimension", "initial_value", "device", "dtype",
-              "lr", "steps", "lambda_reg", "line_search")
+    shared = ("problem", "dimension", "initial_value", "energy_weights", "device", "dtype",
+              "steps", "lambda_reg")
     for config, _ in experiments[1:]:
         if any(config.get(key) != reference.get(key) for key in shared):
             raise ValueError("Comparison requires matching problem and experiment settings")
@@ -152,6 +170,7 @@ def plot_comparison(input_dirs, output):
     has_sav = False
     has_esav = False
     has_new_esav = False
+    has_besav = False
     has_mesav = False
     has_csav = False
     has_inverse = False
@@ -188,17 +207,19 @@ def plot_comparison(input_dirs, output):
             ratio_key = "r_over_E_plus_C"
             shifts.add(config["total_shift"])
             has_csav = True
+        elif method in BESAV_STYLES:
+            label, color, style, marker = BESAV_STYLES[method]
+            ratio_key = "r_over_exp_auxiliary_energy"
+            has_besav = True
         elif method in MESAV_STYLES:
             label, color, style, marker = MESAV_STYLES[method]
             ratio_key = "r_over_exp_auxiliary_energy"
             shifts.add(config["total_shift"])
             has_mesav = True
-        elif method == "esav":
-            label = esav_label(config)
-            color, style, marker = "#009e73", "-", "D"
+        elif method in ESAV_STYLES:
+            label, color, style, marker = ESAV_STYLES[method]
             marker_start = 0
             ratio_key = "r_over_exp_auxiliary_energy"
-            shifts.add(config["total_shift"])
             has_new_esav = True
         elif method == "naive_esav":
             label = esav_label(config)
@@ -210,7 +231,7 @@ def plot_comparison(input_dirs, output):
                 color, style, marker = "#008b8b", "-", "D"
             ratio_key = "r_over_exp_E"
             has_esav = True
-        elif method in ("pb_esav", "pb_naive_esav"):
+        elif method == "pb_naive_esav":
             scheme = config["scheme"]
             label = esav_label(config)
             color, style, marker = {
@@ -249,6 +270,7 @@ def plot_comparison(input_dirs, output):
             shifts.add(config["total_shift"])
         else:
             raise ValueError(f"Unsupported method in experiment config: {method}")
+        label += " | Armijo" if config.get("line_search") else f" | fixed lr={config['lr']:g}"
         iterations = [int(row["iteration"]) for row in rows]
         objectives = [float(row["objective"]) for row in rows]
         all_objectives.extend(objectives)
@@ -271,14 +293,18 @@ def plot_comparison(input_dirs, output):
     ratio_label = (r"$q^n/\sqrt{E(x^n)+C}$ (SAV/PB-SAV)" if has_sav else "")
     if has_esav:
         names = "naiveESAV / PB" if any(
-            config["method"] in ("pb_esav", "pb_naive_esav") for config, _ in experiments
+            config["method"] == "pb_naive_esav" for config, _ in experiments
         ) else "naiveESAV"
         ratio_label += ("\n" if ratio_label else "") + (
             r"$r^n/\exp(E(x^n))$" + f" ({names})"
         )
     if has_new_esav:
         ratio_label += ("\n" if ratio_label else "") + (
-            r"$r^n/[\exp(E(x^n))\sqrt{E(x^n)+C}]$ (ESAV)"
+            r"$r^n/\exp(E(x^n)/(4E^0))$ (ESAV/PB)"
+        )
+    if has_besav:
+        ratio_label += ("\n" if ratio_label else "") + (
+            r"$r^n/\exp(E(x^n)/(E(x^n)+E^0))$ (BESAV/PB)"
         )
     if has_csav:
         ratio_label += ("\n" if ratio_label else "") + r"$r^n/[E(x^n)+C]$ (CSAV)"
@@ -317,8 +343,9 @@ def plot_comparison(input_dirs, output):
     shift_note = ""
     if shifts:
         shift_note = "Shift C = " + ", ".join(f"{v:g}" for v in sorted(shifts))
-    fig.suptitle(f"{reference['problem'].capitalize()} benchmark | {step_label(reference)}, "
-                 f"regularization = {reference['lambda_reg']:g}\n{shift_note}")
+    policies = "; ".join(dict.fromkeys(step_label(config) for config, _ in experiments))
+    fig.suptitle(f"{reference['problem'].capitalize()} benchmark | {policies}\n"
+                 f"regularization = {reference['lambda_reg']:g} | {shift_note}")
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=200)
@@ -359,6 +386,8 @@ def plot_modified_energy(input_dirs, output):
                  "esav": 4, "naive_esav": 5, "pb_naive_esav": 6, "pb_esav": 7,
                  "inverse_sav": 8, "pb_inverse_sav": 9}
         order.update({method: 10 + index for index, method in enumerate(MESAV_STYLES)})
+        order.update({method: 4 + index for index, method in enumerate(ESAV_STYLES)})
+        order.update({method: 14 + index for index, method in enumerate(BESAV_STYLES)})
         group.sort(key=lambda item: order[item[0]["method"]])
         for config, rows in group:
             method = config["method"]
@@ -383,19 +412,24 @@ def plot_modified_energy(input_dirs, output):
                 label = "SAV" if method == "sav" else "PB-SAV"
                 label += r": $(q^n)^2$"
                 color, style, marker, start = "#0072b2", "--", "s", 15
+            elif method in BESAV_STYLES:
+                label, color, style, marker = BESAV_STYLES[method]
+                label += r": $\ln r^n$"
+                start = 0
             elif method in MESAV_STYLES:
                 label, color, style, marker = MESAV_STYLES[method]
                 label += r": $\ln r^n$"
                 start = 0
-            elif method == "esav":
-                label = r"ESAV: $\ln r^n$"
-                color, style, marker, start = "#009e73", "-", "D", 0
+            elif method in ESAV_STYLES:
+                label, color, style, marker = ESAV_STYLES[method]
+                label += r": $4E^0\ln r^n$"
+                start = 0
             elif method == "naive_esav":
                 label = esav_label(config) + r": $\ln r^n$"
                 color, style, marker, start = "#d55e00", "--", "^", 30
                 if config.get("relax"):
                     color, style, marker = "#008b8b", "-", "D"
-            elif method in ("pb_esav", "pb_naive_esav"):
+            elif method == "pb_naive_esav":
                 label = esav_label(config) + r": $\ln r^n$"
                 color, style, marker, start = {
                     "plan1": ("#009e73", "-", "d", 10),
@@ -442,15 +476,14 @@ def plot_training_curves(input_dirs, output):
         ("csav", None): ("CSAV", "#8b3fb0", "-", "v"),
         ("inverse_sav", None): ("Inverse SAV", "#8b3fb0", "-", "v"),
         ("pb_inverse_sav", None): ("PB-Inverse SAV", "#009e73", "-", "D"),
-        ("esav", None): ("ESAV", "#009e73", "-", "D"),
         ("naive_esav", None): ("naiveESAV", "#d89b00", "-", None),
         ("pb_sav", None): ("PB-SAV", "#3568a8", "-", None),
-        ("pb_esav", "plan1"): ("PB-ESAV Plan 1", "#d16a2c", "--", None),
-        ("pb_esav", "plan2"): ("PB-ESAV Plan 2", "#218c60", ":", "o"),
         ("pb_naive_esav", "plan1"): ("PB-naiveESAV Plan 1", "#8953b1", "--", None),
         ("pb_naive_esav", "plan2"): ("PB-naiveESAV Plan 2", "#8c564b", ":", "s"),
     }
     styles.update({(method, None): values for method, values in MESAV_STYLES.items()})
+    styles.update({(method, None): values for method, values in ESAV_STYLES.items()})
+    styles.update({(method, None): values for method, values in BESAV_STYLES.items()})
     keys = ("objective", "test_mse") if all(
         "test_mse" in rows[0] for _, rows in experiments
     ) else ("objective",)
@@ -458,10 +491,8 @@ def plot_training_curves(input_dirs, output):
     axes = axes[0]
     for config, rows in experiments:
         style_method = config["method"]
-        if style_method == "pb_esav" and esav_label(config).startswith("PB-naiveESAV"):
-            style_method = "pb_naive_esav"
         label, color, style, marker = styles[(style_method, config.get("scheme"))]
-        if config["method"] in ("esav", "naive_esav", "pb_esav", "pb_naive_esav"):
+        if config["method"] in ("naive_esav", "pb_naive_esav"):
             label = esav_label(config)
             if config.get("linearized"):
                 color, style = "#cc503e", ":"
