@@ -1,0 +1,382 @@
+{
+  "A1": {
+    "title": "A1: Quadratic | M = 1",
+    "runs": [
+      {
+        "id": "20c9bc28cfa3",
+        "label": "SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "bbac1a11c98c",
+        "label": "ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "640958e349a7",
+        "label": "Relax-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "df873b70f847",
+        "label": "Relax-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "81cd960259c2",
+        "label": "SGD",
+        "records_version": "v0"
+      },
+      {
+        "id": "8914085ecaec",
+        "label": "AdamW",
+        "records_version": "v0"
+      }
+    ]
+  },
+  "B1": {
+    "title": "B1: Quadratic | M = 2",
+    "runs": [
+      {
+        "id": "1288824d6201",
+        "label": "PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "b6b4f3c6580c",
+        "label": "PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "d3b4d07c7275",
+        "label": "Relax-PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "bfee6830c639",
+        "label": "Relax-PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "81cd960259c2",
+        "label": "SGD",
+        "records_version": "v0"
+      },
+      {
+        "id": "8914085ecaec",
+        "label": "AdamW",
+        "records_version": "v0"
+      }
+    ]
+  },
+  "C1": {
+    "title": "C1: Nonlinear regression | M = 1",
+    "runs": [
+      {
+        "id": "98ab403b9a60",
+        "label": "SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "2977d4c255df",
+        "label": "ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "748b782c7154",
+        "label": "Relax-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "f394ef48a942",
+        "label": "Relax-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "b4caea89eaf7",
+        "label": "SGD",
+        "records_version": "v0"
+      },
+      {
+        "id": "a1d48545dfa6",
+        "label": "AdamW",
+        "records_version": "v0"
+      }
+    ]
+  },
+  "D1": {
+    "title": "D1: Nonlinear regression | M = 2",
+    "runs": [
+      {
+        "id": "fbb4aad536d5",
+        "label": "PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "5c8532a1e995",
+        "label": "PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "5ff770f6618c",
+        "label": "Relax-PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "bb4c930fc9d6",
+        "label": "Relax-PB-ESAV",
+        "records_version": "v0"
+      }
+    ]
+  },
+  "D2": {
+    "title": "D2: Nonlinear regression | M = 4",
+    "runs": [
+      {
+        "id": "908af20a4137",
+        "label": "PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "a1f98c1c8160",
+        "label": "PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "42e98dfb423b",
+        "label": "Relax-PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "cfa7a3cc86c1",
+        "label": "Relax-PB-ESAV",
+        "records_version": "v0"
+      }
+    ]
+  },
+  "D3": {
+    "title": "D3: Nonlinear regression | M = 8",
+    "runs": [
+      {
+        "id": "eb2848ac1045",
+        "label": "PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "ddb3a1415a5c",
+        "label": "PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "5987a9a61dd0",
+        "label": "Relax-PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "3a940eccc41a",
+        "label": "Relax-PB-ESAV",
+        "records_version": "v0"
+      }
+    ]
+  },
+  "D4": {
+    "title": "D4: Nonlinear regression | M = 16",
+    "runs": [
+      {
+        "id": "c35d2e4e83fb",
+        "label": "PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "5ab903f3df71",
+        "label": "PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "5eda45981333",
+        "label": "Relax-PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "58b1d468b5e6",
+        "label": "Relax-PB-ESAV",
+        "records_version": "v0"
+      }
+    ]
+  },
+  "D5": {
+    "title": "D5: Nonlinear regression | M = 30",
+    "runs": [
+      {
+        "id": "40f912e75865",
+        "label": "PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "24ef5f8af31c",
+        "label": "PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "00c28cf1a34e",
+        "label": "Relax-PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "c6bc56347ca7",
+        "label": "Relax-PB-ESAV",
+        "records_version": "v0"
+      }
+    ]
+  },
+  "E1": {
+    "title": "E1: Nonlinear regression | M = 2 | momentum = 0.9",
+    "runs": [
+      {
+        "id": "f9a954df51ca",
+        "label": "PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "24019ed86d38",
+        "label": "PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "83ec9760b0d1",
+        "label": "Relax-PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "de017e333e33",
+        "label": "Relax-PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "8cffc061330b",
+        "label": "SGD + momentum",
+        "records_version": "v0"
+      }
+    ]
+  },
+  "E2": {
+    "title": "E2: Nonlinear regression | M = 4 | momentum = 0.9",
+    "runs": [
+      {
+        "id": "a71e47e477d5",
+        "label": "PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "ec740acccad4",
+        "label": "PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "311e0d1cde20",
+        "label": "Relax-PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "bd604d57dc43",
+        "label": "Relax-PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "8cffc061330b",
+        "label": "SGD + momentum",
+        "records_version": "v0"
+      }
+    ]
+  },
+  "E3": {
+    "title": "E3: Nonlinear regression | M = 8 | momentum = 0.9",
+    "runs": [
+      {
+        "id": "873df0bf8cc0",
+        "label": "PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "b6a804c7552a",
+        "label": "PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "bae041585253",
+        "label": "Relax-PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "8eb0c036f0f1",
+        "label": "Relax-PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "8cffc061330b",
+        "label": "SGD + momentum",
+        "records_version": "v0"
+      }
+    ]
+  },
+  "E4": {
+    "title": "E4: Nonlinear regression | M = 16 | momentum = 0.9",
+    "runs": [
+      {
+        "id": "a2c6a0a67046",
+        "label": "PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "877b3447b2c4",
+        "label": "PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "0205570c823c",
+        "label": "Relax-PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "617ec7e64ea9",
+        "label": "Relax-PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "8cffc061330b",
+        "label": "SGD + momentum",
+        "records_version": "v0"
+      }
+    ]
+  },
+  "E5": {
+    "title": "E5: Nonlinear regression | M = 30 | momentum = 0.9",
+    "runs": [
+      {
+        "id": "b63e430be88d",
+        "label": "PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "6e7a8d07ccd9",
+        "label": "PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "09b8192545ac",
+        "label": "Relax-PB-SAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "571db84cacda",
+        "label": "Relax-PB-ESAV",
+        "records_version": "v0"
+      },
+      {
+        "id": "8cffc061330b",
+        "label": "SGD + momentum",
+        "records_version": "v0"
+      }
+    ]
+  }
+}

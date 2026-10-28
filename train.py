@@ -4,7 +4,8 @@ import math
 
 import torch
 
-from optimizer import besav, esav, mesav, pb_besav, pb_esav, pb_mesav
+from optimizer import besav, esav, mesav, pb_besav, pb_esav, pb_mesav, pb_sav_momentum
+from optimizer import pb_esav_momentum
 
 
 def _armijo_step(parameters, loss_fn, update_fn, initial_lr, settings, iteration):
@@ -54,15 +55,7 @@ def _armijo_step(parameters, loss_fn, update_fn, initial_lr, settings, iteration
             raise
 
         if finite and slope <= 0 and trial_objective <= bound:
-            stats = {
-                "initial_lr": initial_lr,
-                "accepted_lr": lr,
-                "rejected_trials": rejected,
-                "nonfinite_trials": nonfinite,
-                "directional_derivative": slope,
-                "armijo_bound": bound,
-            }
-            return trial_state, stats
+            return trial_state, lr
 
         restore_parameters()
         rejected += 1
@@ -80,11 +73,15 @@ def _armijo_step(parameters, loss_fn, update_fn, initial_lr, settings, iteration
 def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
           total_shift=None, relax=False, *, esav_scheme=None, eta=None, metrics_fn=None,
           method=None, line_search=None, history=None,
-          naive_esav_linearized=False):
-    """Record initial/accepted states; rejected trials do not consume the update budget."""
+          naive_esav_linearized=False, initial_state=None, on_record=None):
+    """Record initial/accepted states and pass a copy of each row to optional on_record."""
     is_esav = method in ("esav", "pb_esav")
     is_besav = method in ("besav", "pb_besav")
-    if (is_esav or is_besav) and (esav_scheme is not None or total_shift is not None):
+    is_esav_momentum = method == "pb_esav_momentum"
+    if method in ("pb_sav_momentum", "pb_esav_momentum") and line_search is not None:
+        raise ValueError("PB momentum currently requires a fixed learning rate")
+    if (is_esav or is_besav or is_esav_momentum) and (
+            esav_scheme is not None or total_shift is not None):
         raise ValueError("ESAV/BESAV uses frozen initial energies, without a Plan or total_shift")
     if eta is not None:
         if esav_scheme != "plan1" or not relax:
@@ -96,7 +93,8 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
             raise ValueError(f"Unsupported ESAV scheme: {esav_scheme}")
         if total_shift is not None:
             raise ValueError("ESAV auxiliary energies do not use total_shift")
-    elif not (is_esav or is_besav) and method not in ("gd", "sgd", "adamw", "naive_esav"):
+    elif not (is_esav or is_besav or is_esav_momentum) and method not in (
+            "gd", "sgd", "adamw", "naive_esav"):
         total_shift = 1e-10 if total_shift is None else total_shift
     is_mesav = method in ("mesav", "pb_mesav")
     has_esav_state = (
@@ -114,39 +112,37 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
     parameters = tuple(parameters)
     history = [] if history is None else history
     q = None
-    state = None
-    step_stats = {
-        "initial_lr": 0.0, "accepted_lr": 0.0,
-        "rejected_trials": 0, "nonfinite_trials": 0,
-        "directional_derivative": 0.0, "armijo_bound": 0.0,
-    }
+    state = initial_state
+    accepted_lr = 0.0
     for iteration in range(steps + 1):
         with torch.no_grad():
             terms = loss_fn()
             terms = [terms] if isinstance(terms, torch.Tensor) else list(terms)
             energy = sum(terms)
-            row = {"iteration": iteration, "objective": energy.item()}
-            if method in ("inverse_sav", "pb_inverse_sav"):
-                shifted = energy + total_shift
-                if not torch.isfinite(shifted).all() or (shifted <= 0).any():
-                    raise FloatingPointError(f"Inverse SAV requires E + C > 0 at {iteration}")
-                if q is None:
-                    q = shifted.reciprocal().detach().clone()
-                row.update(r=q.item(), r_times_E_plus_C=(q * shifted).item(),
-                           modified_energy=q.reciprocal().item())
-            elif method == "csav":
-                shifted = energy + total_shift
-                if not torch.isfinite(shifted).all() or (shifted <= 0).any():
-                    raise FloatingPointError(f"CSAV requires E + C > 0 at iteration {iteration}")
-                if q is None:
-                    q = shifted.detach().clone()
-                row.update(r=q.item(), r_over_E_plus_C=(q / shifted).item(),
-                           modified_energy=q.item())
-            elif method == "naive_esav" and naive_esav_linearized:
+            row = {"iteration": iteration, "objective": energy.item(), "lr": accepted_lr}
+            if is_esav_momentum or is_esav:
+                if not torch.isfinite(energy) or energy < 0:
+                    raise FloatingPointError(f"ESAV requires finite E>=0 at iteration {iteration}")
                 if state is None:
-                    state = {"r": energy.exp().detach()}
-                row.update(r=state["r"].item(),
-                           r_over_exp_E=(state["r"] * (-energy).exp()).item())
+                    if is_esav_momentum:
+                        state = pb_esav_momentum.initialize(parameters, terms)
+                    else:
+                        initializer = pb_esav if method == "pb_esav" else esav
+                        state = initializer.initialize(terms)
+                row.update(r=state["log_r"].exp().item(),
+                           r_current=(energy / (4 * state["initial_energy"])).exp().item())
+            elif method == "pb_sav_momentum":
+                if state is None:
+                    state = pb_sav_momentum.initialize(parameters, terms, total_shift)
+                row.update(r=state["q"].item(), r_current=(energy + total_shift).sqrt().item())
+            elif method in ("inverse_sav", "pb_inverse_sav", "csav"):
+                shifted = energy + total_shift
+                if not torch.isfinite(shifted).all() or (shifted <= 0).any():
+                    raise FloatingPointError(f"{method} requires E+C>0 at iteration {iteration}")
+                current = shifted if method == "csav" else shifted.reciprocal()
+                if q is None:
+                    q = current.detach().clone()
+                row.update(r=q.item(), r_current=current.item())
             elif is_mesav:
                 shifted = energy + total_shift
                 if not torch.isfinite(shifted) or shifted <= 0:
@@ -154,77 +150,56 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                 if state is None:
                     initializer = pb_mesav if method == "pb_mesav" else mesav
                     state = initializer.initialize(terms, total_shift)
-                auxiliary_energy = energy / state["reference_energy"] + 0.5 * shifted.log()
-                row.update(
-                    log_r=state["log_r"].item(),
-                    r_over_exp_auxiliary_energy=(state["log_r"] - auxiliary_energy).exp().item(),
-                    modified_energy=state["log_r"].item(),
-                )
+                current_log = energy / state["reference_energy"] + 0.5 * shifted.log()
+                row.update(r=state["log_r"].exp().item(), r_current=current_log.exp().item())
             elif is_besav:
                 if not torch.isfinite(energy) or energy < 0:
-                    raise FloatingPointError(
-                        f"BESAV requires finite E >= 0 at iteration {iteration}"
-                    )
+                    raise FloatingPointError(f"BESAV requires finite E>=0 at iteration {iteration}")
                 if state is None:
                     initializer = pb_besav if method == "pb_besav" else besav
                     state = initializer.initialize(terms)
-                auxiliary_energy, _ = besav.log_definition(energy, state["initial_energy"])
-                row.update(
-                    log_r=state["log_r"].item(),
-                    r_over_exp_auxiliary_energy=(state["log_r"] - auxiliary_energy).exp().item(),
-                    modified_energy=state["log_r"].item(),
-                )
-            elif is_esav:
-                if not torch.isfinite(energy) or energy < 0:
-                    raise FloatingPointError(
-                        f"ESAV requires finite E >= 0 at iteration {iteration}"
-                    )
+                current_log, _ = besav.log_definition(energy, state["initial_energy"])
+                row.update(r=state["log_r"].exp().item(), r_current=current_log.exp().item())
+            elif method == "naive_esav" and naive_esav_linearized:
                 if state is None:
-                    initializer = pb_esav if method == "pb_esav" else esav
-                    state = initializer.initialize(terms)
-                auxiliary_energy = energy / (4 * state["initial_energy"])
-                row.update(
-                    log_r=state["log_r"].item(),
-                    r_over_exp_auxiliary_energy=(state["log_r"] - auxiliary_energy).exp().item(),
-                    modified_energy=(4 * state["initial_energy"] * state["log_r"]).item(),
-                )
-            elif not has_esav_state and method not in ("gd", "sgd", "adamw"):
-                Q = (energy + total_shift).sqrt()
-                if q is None:
-                    q = Q.detach().clone()
-                row.update(q=q.item(), Q=Q.item(), q_over_Q=(q / Q).item(),
-                           modified_energy=q.square().item())
+                    state = {"r": energy.exp().detach()}
+                row.update(r=state["r"].item(), r_current=energy.exp().item())
             elif has_esav_state:
-                energies = torch.stack([energy] if method == "naive_esav" else terms)
-                local_energy = energies
                 if state is None:
                     state = {"log_r": energy.detach().clone()}
                     if esav_scheme == "plan2":
-                        state["log_r_i"] = local_energy.detach().clone()
-                row.update(log_r=state["log_r"].item(),
-                           r_over_exp_E=(state["log_r"] - energy).exp().item(),
-                           modified_energy=state["log_r"].item())
-                for i, value in enumerate(energies, start=1):
+                        state["log_r_i"] = torch.stack(terms).detach().clone()
+                row.update(r=state["log_r"].exp().item(), r_current=energy.exp().item())
+            elif method not in ("gd", "sgd", "adamw"):
+                current = (energy + total_shift).sqrt()
+                if q is None:
+                    q = current.detach().clone()
+                row.update(r=q.item(), r_current=current.item())
+            if method in ("pb_esav", "pb_esav_momentum"):
+                energies = torch.stack(terms)
+                if not torch.isfinite(energies).all() or (energies < 0).any():
+                    raise FloatingPointError(f"PB-ESAV requires finite E_i>=0 at {iteration}")
+                pb_esav._validate_state(state, energies)
+            if len(terms) > 1:
+                for i, value in enumerate(terms, start=1):
                     row[f"energy_{i}"] = value.item()
-                if esav_scheme == "plan2":
-                    for i, (log_r_i, value) in enumerate(
-                            zip(state["log_r_i"], local_energy), start=1):
-                        row[f"log_r_{i}"] = log_r_i.item()
-                        row[f"r_{i}_over_exp_E_{i}"] = (log_r_i - value).exp().item()
             if metrics_fn is not None:
                 row.update(metrics_fn())
-            if line_search is not None:
-                row.update(step_stats)
-                if iteration == 0:
-                    row["armijo_bound"] = energy.item()
         if not all(math.isfinite(value) for value in row.values()):
-            raise FloatingPointError(f"Non-finite result at iteration {iteration}")
+            if on_record is not None:
+                on_record(dict(row))
+            raise FloatingPointError(f"Non-finite result at iteration {iteration}: {row}")
         history.append(row)
+        if on_record is not None:
+            on_record(dict(row))
         if iteration < steps:
+            accepted_lr = lr
             if line_search is not None:
                 def trial_update(trial_lr):
-                    if method in ("gd", "sgd"):
+                    if method == "gd":
                         return step_fn(parameters, loss_fn, trial_lr)
+                    if method == "sgd":
+                        return step_fn(parameters, loss_fn, trial_lr, state=state)
                     if is_esav or is_besav or is_mesav or method == "naive_esav":
                         return step_fn(parameters, loss_fn, state, trial_lr, relax=relax)
                     if method == "adamw":
@@ -238,15 +213,19 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                         trial_lr, scheme=esav_scheme, relax=relax, eta=eta,
                     )
 
-                accepted_state, step_stats = _armijo_step(
+                accepted_state, accepted_lr = _armijo_step(
                     parameters, loss_fn, trial_update, lr, line_search, iteration + 1,
                 )
-                if not has_esav_state and method != "adamw":
+                if not has_esav_state and method not in ("adamw", "sgd"):
                     q = accepted_state
                 else:
                     state = accepted_state
-            elif method in ("gd", "sgd"):
+            elif method == "gd":
                 step_fn(parameters, loss_fn, lr)
+            elif method == "sgd":
+                state = step_fn(parameters, loss_fn, lr, state=state)
+            elif method in ("pb_sav_momentum", "pb_esav_momentum"):
+                state = step_fn(parameters, loss_fn, state, lr, relax=relax)
             elif is_esav or is_besav or is_mesav or method == "naive_esav":
                 state = step_fn(parameters, loss_fn, state, lr, relax=relax)
             elif method == "adamw":

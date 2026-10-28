@@ -1,2 +1,5 @@
 torch
 matplotlib
+numpy
+scipy
+wandb==0.31.0

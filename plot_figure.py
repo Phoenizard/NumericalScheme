@@ -2,14 +2,24 @@
 
 import argparse
 import csv
+from datetime import datetime, timezone
 import json
 import math
+import os
+import re
+import time
 from pathlib import Path
+
+os.environ.setdefault("MPLCONFIGDIR", str(Path(__file__).resolve().parent / "TMP/matplotlib"))
 
 import matplotlib
 
+from problem.config import WANDB
+from tracking import _sdk, read_config
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import LogFormatterMathtext, LogLocator, MaxNLocator, NullLocator
 
 ESAV_STYLES = {
     "esav": ("ESAV", "#009e73", "-", "D"),
@@ -36,6 +46,7 @@ BESAV_STYLES = {
 def load_experiment(input_dir):
     input_dir = Path(input_dir)
     config = json.loads((input_dir / "config.json").read_text(encoding="utf-8"))
+    config = read_config(config)
     with (input_dir / "history.csv").open(newline="", encoding="utf-8") as file:
         rows = list(csv.DictReader(file))
     if not rows:
@@ -91,9 +102,147 @@ def set_objective_scale(axis, values):
                  ylabel=r"$E(x^n)$")
 
 
+def load_wandb_csv(input_file):
+    """Read objective series from a W&B chart export without resampling."""
+    with Path(input_file).open(newline="", encoding="utf-8-sig") as file:
+        reader = csv.DictReader(file)
+        fields = reader.fieldnames or []
+        columns = [field for field in fields if field.endswith(" - objective")]
+        if "iteration" not in fields or not columns:
+            raise ValueError("W&B CSV requires iteration and '<run> - objective' columns")
+        if len(fields) != len(set(fields)):
+            raise ValueError("W&B CSV contains duplicate column names")
+        rows = list(reader)
+    if not rows:
+        raise ValueError("The W&B CSV is empty")
+
+    def numbers(column):
+        values = []
+        for line, row in enumerate(rows, start=2):
+            try:
+                value = float(row[column])
+            except (TypeError, ValueError) as error:
+                raise ValueError(f"CSV row {line}, {column}: missing or nonnumeric value") from error
+            if not math.isfinite(value):
+                raise ValueError(f"CSV row {line}, {column}: nonfinite value {row[column]}")
+            values.append(value)
+        return values
+
+    iterations = numbers("iteration")
+    if any(value < 0 or not value.is_integer() for value in iterations):
+        raise ValueError("CSV iterations must be nonnegative integers")
+    if any(right <= left for left, right in zip(iterations, iterations[1:])):
+        raise ValueError("CSV iterations must be strictly increasing")
+    series = [(column.removesuffix(" - objective"), numbers(column)) for column in columns]
+    return iterations, series
+
+
+def plot_wandb_csv(input_file, output, *, labels=None, title=None):
+    """Plot exported objectives with labelled log ticks and unmodified samples."""
+    iterations, series = load_wandb_csv(input_file)
+    curves = [(name, iterations, values) for name, values in series]
+    return plot_objective_series(curves, output, labels=labels, title=title)
+
+
+def plot_objective_series(series, output, *, labels=None, title=None, statuses=None):
+    """Plot complete recorded curves, retaining each run's actual stopping iteration."""
+    if labels is not None and len(labels) != len(series):
+        raise ValueError(f"Expected {len(series)} labels in CSV objective-column order")
+    labels = labels if labels is not None else [name for name, _, _ in series]
+    statuses = statuses if statuses is not None else ["completed"] * len(series)
+    if len(statuses) != len(series):
+        raise ValueError("Each objective series needs one status")
+    styles = {style[0]: style[1:] for style in ESAV_STYLES.values()}
+    styles.update({
+        "SAV": ("#0072b2", "-", "o"),
+        "Relax-SAV": ("#d55e00", "--", "^"),
+        "PB-SAV": ("#0072b2", "-", "s"),
+        "Relax-PB-SAV": ("#d55e00", "--", "^"),
+        "SGD": ("#555555", ":", "x"),
+        "AdamW": ("#8064c6", "-", ""),
+    })
+    fig, axis = plt.subplots(figsize=(9.6, 5.8), layout="constrained")
+    all_values = []
+    for index, ((name, iterations, values), label, status) in enumerate(
+        zip(series, labels, statuses)
+    ):
+        marker_step = max(1, len(iterations) // 12)
+        color, line, marker = styles.get(label, (f"C{index % 10}", "-", ""))
+        shown_label = label if status == "completed" else f"{label} ({status})"
+        axis.plot(
+            iterations, values, label=shown_label, color=color, linestyle=line,
+            linewidth=1.6, marker=marker, markersize=5, markerfacecolor="none",
+            markevery=(index * 3 % marker_step, marker_step),
+        )
+        if status != "completed":
+            axis.plot(iterations[-1], values[-1], marker="x", color=color,
+                      markersize=9, markeredgewidth=2)
+        all_values.extend(values)
+        print(f"{name}: {len(values)} points, last iteration={iterations[-1]:g}, "
+              f"objective={values[-1]:.9e}")
+    set_objective_scale(axis, all_values)
+    if axis.get_yscale() == "log":
+        axis.yaxis.set_major_locator(LogLocator(base=10, numticks=9))
+        axis.yaxis.set_major_formatter(LogFormatterMathtext(base=10))
+        axis.yaxis.set_minor_locator(NullLocator())
+        axis.set_title(title or "Objective")
+    elif title:
+        axis.set_title(f"{title}\n{axis.get_title()}")
+    axis.set(xlabel="Iteration", ylabel=r"Objective $E(\theta^n)$")
+    axis.xaxis.set_major_locator(MaxNLocator(nbins=6, integer=True))
+    axis.tick_params(labelsize=11)
+    axis.margins(x=0, y=0.04)
+    axis.grid(True, which="major", color="#d8d8d8", linewidth=0.6, alpha=0.7)
+    axis.spines[["top", "right"]].set_visible(False)
+    axis.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14),
+                ncol=3 if len(series) >= 6 else 2,
+                frameon=False, fontsize=10, handlelength=3)
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=300, facecolor="white", bbox_inches="tight")
+    plt.close(fig)
+    print(f"Figure: {output.resolve()}")
+    return output
+
+
+def plot_recorded_results(experiments, output, *, auxiliary=False):
+    """Plot the current objective and optional total auxiliary values as recorded."""
+    fig, axes = plt.subplots(1, 2 if auxiliary else 1, figsize=(10, 4.2),
+                             layout="constrained", squeeze=False)
+    axes = axes[0]
+    objectives = []
+    for config, rows in experiments:
+        iterations = [int(row["iteration"]) for row in rows]
+        values = [float(row["objective"]) for row in rows]
+        objectives.extend(values)
+        label = config["method"]
+        if config.get("relax") and not label.startswith("relax_"):
+            label += " (relaxed)"
+        if config.get("components", 1) > 1:
+            label += f" M={config['components']}"
+        label += " | Armijo" if config.get("line_search") else f" | lr={config['lr']:g}"
+        axes[0].plot(iterations, values, label=label)
+        if auxiliary:
+            for key, style in (("r", "-"), ("r_current", "--")):
+                axes[1].plot(iterations, [float(row[key]) for row in rows], style, label=key)
+            axes[1].set(title="Auxiliary variable", ylabel="r")
+    set_objective_scale(axes[0], objectives)
+    for axis in axes:
+        axis.set_xlabel("Iteration")
+        axis.grid(True, alpha=0.2)
+        axis.legend()
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=200)
+    plt.close(fig)
+    return output
+
+
 def plot_experiment(input_dir, output):
     config, rows = load_experiment(input_dir)
-    if config["method"] in ("gd", "sgd", "adamw"):
+    if "r_current" in rows[0]:
+        return plot_recorded_results([(config, rows)], output, auxiliary=True)
+    if config["problem"] == "darcy_deeponet" or config["method"] in ("gd", "sgd", "adamw"):
         return plot_comparison([input_dir], output)
     iterations = [int(row["iteration"]) for row in rows]
     objectives = [float(row["objective"]) for row in rows]
@@ -146,6 +295,10 @@ def plot_experiment(input_dir, output):
 
 def plot_comparison(input_dirs, output):
     experiments = [load_experiment(path) for path in input_dirs]
+    if any(config["problem"] == "darcy_deeponet" for config, _ in experiments):
+        return plot_darcy_curves(experiments, output)
+    if all("lr" in rows[0] for _, rows in experiments):
+        return plot_recorded_results(experiments, output)
     if any(config["problem"] == "nonlinear_regression" for config, _ in experiments):
         return plot_training_curves(input_dirs, output)
     reference = experiments[0][0]
@@ -357,6 +510,8 @@ def plot_comparison(input_dirs, output):
 def plot_modified_energy(input_dirs, output):
     """Compare auxiliary energies with baseline objectives, grouped by learning rate."""
     experiments = [load_experiment(path) for path in input_dirs]
+    if any("r_current" in rows[0] for _, rows in experiments):
+        raise ValueError("New records contain r/r_current; use the default plot, not modified energy")
     reference = experiments[0][0]
     shared = ("problem", "dimension", "initial_value", "energy_weights", "device", "dtype",
               "steps", "lambda_reg", "line_search")
@@ -466,9 +621,59 @@ def plot_modified_energy(input_dirs, output):
     return output
 
 
+def plot_darcy_curves(experiments, output):
+    """Plot saved Darcy data losses and mean test relative L2, without rerunning models."""
+    reference = experiments[0][0]
+    for config, _ in experiments:
+        if config["problem"] != "darcy_deeponet" or config["method"] not in (
+                "sgd", "pb_sav_momentum", "pb_esav_momentum"):
+            raise ValueError("Darcy plots require SGD or PB momentum records")
+        if any(config.get(key) != reference.get(key) for key in (
+                "data_config", "init_seed", "device", "dtype", "dimension", "lambda_reg",
+                "conv_channels", "conv_kernels", "conv_strides", "conv_paddings",
+                "pool_size", "latent_dim", "trunk_hidden_layers")):
+            raise ValueError("Darcy comparison requires matching data and model settings")
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), layout="constrained")
+    for config, rows in experiments:
+        momentum = config["optimizer_settings"]["momentum"]
+        if config["method"] in ("pb_sav_momentum", "pb_esav_momentum"):
+            method_label = "PB-ESAV" if config["method"] == "pb_esav_momentum" else "PB-SAV"
+            label = f"{method_label} + momentum ({momentum:g})"
+            if config["optimizer_settings"].get("mobility") == "amsgrad":
+                label += " + adaptive"
+            if config.get("relax"):
+                label += " + Relax"
+        else:
+            label = f"SGD + momentum ({momentum:g})" if momentum else "SGD"
+        label += f" | lr={config['lr']:g}"
+        iterations = [int(row["iteration"]) for row in rows]
+        for axis, key in zip(axes, ("data_loss", "test_relative_l2")):
+            axis.plot(iterations, [float(row[key]) for row in rows], label=label)
+    axes[0].set(title="Training data loss", ylabel=r"$E_{\mathrm{data}}$")
+    axes[1].set(title="Test relative L2", ylabel="Mean per-field relative L2")
+    for axis, key in zip(axes, ("data_loss", "test_relative_l2")):
+        if all(float(row[key]) > 0 for _, rows in experiments for row in rows):
+            axis.set_yscale("log")
+        axis.set_xlabel("Parameter updates")
+        axis.grid(True, alpha=0.2)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="outside lower center", frameon=False)
+    fig.suptitle(f"Darcy DeepONet | seed {reference['init_seed']}")
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=200)
+    plt.close(fig)
+    print(f"Figure: {output.resolve()}")
+    return output
+
+
 def plot_training_curves(input_dirs, output):
     """Compare objectives, including historical test MSE only when every run records it."""
     experiments = [load_experiment(path) for path in input_dirs]
+    if any(config["problem"] == "darcy_deeponet" for config, _ in experiments):
+        return plot_darcy_curves(experiments, output)
+    if all("lr" in rows[0] for _, rows in experiments):
+        return plot_recorded_results(experiments, output)
     styles = {
         ("gd", None): ("GD", "#333333", "-.", None),
         ("sgd", None): ("SGD", "#333333", "-.", None),
@@ -528,18 +733,269 @@ def plot_training_curves(input_dirs, output):
     return output
 
 
+ROOT = Path(__file__).resolve().parent
+PROJECT = f"{WANDB['entity']}/{WANDB['project']}"
+GROUPS = ROOT / "doc/experiments/esav_plot_groups.json"
+CACHE = ROOT / "TMP/wandb_exports"
+
+
+def read_json(path):
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def write_json(path, value):
+    """Replace a local manifest only after its complete content has been written."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pending = path.with_suffix(path.suffix + ".partial")
+    pending.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+                       encoding="utf-8")
+    pending.replace(path)
+
+
+def validate_records(directory):
+    """Check accepted iterations and summaries without repairing numerical records."""
+    directory = Path(directory)
+    config = read_json(directory / "config.json")
+    summary = read_json(directory / "summary.json")
+    with (directory / "history.csv").open(newline="", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
+        fields = reader.fieldnames or []
+        if not {"iteration", "objective"}.issubset(fields):
+            raise ValueError(f"{directory}: missing iteration/objective columns")
+        if len(fields) != len(set(fields)):
+            raise ValueError(f"{directory}: duplicate history columns")
+        rows = list(reader)
+    if not rows:
+        raise ValueError(f"{directory}: empty history")
+    for index, row in enumerate(rows):
+        for key, text in row.items():
+            try:
+                value = float(text)
+            except (TypeError, ValueError) as error:
+                raise ValueError(f"{directory}: row {index + 2}, invalid {key}") from error
+            if not math.isfinite(value):
+                raise ValueError(f"{directory}: row {index + 2}, nonfinite {key}={text}")
+        if float(row["iteration"]) != index:
+            raise ValueError(f"{directory}: iteration {index} missing, duplicated or out of order")
+    status = summary.get("status")
+    if status not in ("completed", "failed", "interrupted"):
+        raise ValueError(f"{directory}: unknown status {status!r}")
+    planned = config["experiment"]["steps"]
+    actual = len(rows) - 1
+    if actual > planned or (status == "completed" and actual != planned):
+        raise ValueError(f"{directory}: {status}, recorded {actual}/{planned} updates")
+    if status != "completed":
+        failure = read_json(directory / "failure.json")
+        if not failure.get("error_type"):
+            raise ValueError(f"{directory}: failed run has no recorded failure reason")
+    for key, value in rows[-1].items():
+        if key not in summary or not math.isclose(
+            float(value), float(summary[key]), rel_tol=1e-12, abs_tol=0
+        ):
+            raise ValueError(f"{directory}: final {key} differs from summary")
+    objectives = [float(row["objective"]) for row in rows]
+    if not math.isclose(min(objectives), float(summary["best_objective"]),
+                        rel_tol=1e-12, abs_tol=0):
+        raise ValueError(f"{directory}: best_objective differs from history")
+    checks = {"status": status, "rows": len(rows), "actual_updates": actual,
+              "planned_updates": planned, "final_objective": objectives[-1],
+              "best_objective": min(objectives)}
+    return config, rows, checks
+
+
+class RecordReader:
+    """Use immutable artifact versions; a valid cache needs no network connection."""
+
+    def __init__(self, cache, offline=False):
+        self.cache = Path(cache)
+        self.offline = offline
+        self.api = None
+        self.sdk = None
+
+    def remote(self, operation):
+        if self.offline:
+            raise FileNotFoundError("Required records are not cached; retry without --offline")
+        if self.api is None:
+            self.sdk = _sdk(ROOT)
+            self.api = self.sdk.Api(timeout=WANDB["init_timeout"])
+        for attempt in range(3):
+            try:
+                return operation(self.api)
+            except (self.sdk.CommError, TimeoutError, ConnectionError):
+                if attempt == 2:
+                    raise
+                print(f"Network operation failed; retry {attempt + 1}/2", flush=True)
+                time.sleep(attempt + 1)
+
+    def fetch(self, run_id, version=None):
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", run_id):
+            raise ValueError(f"Invalid run ID: {run_id!r}")
+        if version is not None and not re.fullmatch(r"v\d+", version):
+            raise ValueError("records_version must be an immutable version such as v0")
+        directory = self.cache / run_id
+        metadata_path = directory / "run.json"
+        if metadata_path.exists():
+            metadata = read_json(metadata_path)
+            if metadata["project"] != PROJECT or metadata["run_id"] != run_id:
+                raise ValueError(f"{directory}: cached run identity differs")
+            if version and not metadata["records_artifact"].endswith(f":{version}"):
+                raise ValueError(f"{run_id}: cached version differs; use a separate --cache")
+        else:
+            run = self.remote(lambda api: api.run(f"{PROJECT}/{run_id}"))
+            if run.state not in ("finished", "failed", "crashed", "killed"):
+                raise ValueError(f"{run_id}: run is {run.state}, not a closed experiment")
+            artifacts = self.remote(lambda api: list(run.logged_artifacts()))
+            records = [item for item in artifacts
+                       if item.type == "experiment-record"
+                       and item.name.split(":")[0] == f"records-{run_id}"
+                       and (version is None or item.version == version)]
+            if len(records) != 1:
+                raise ValueError(f"{run_id}: expected one records artifact, found {len(records)}")
+            artifact = records[0]
+            entries = self.remote(lambda api: sorted(artifact.manifest.entries))
+            required = {"config.json", "history.csv", "summary.json"}
+            if not required.issubset(entries):
+                raise ValueError(f"{run_id}: records artifact lacks {sorted(required - set(entries))}")
+            metadata = {
+                "project": PROJECT, "run_id": run_id, "name": run.name, "url": run.url,
+                "state": run.state, "retrieved_at": datetime.now(timezone.utc).isoformat(),
+                "records_artifact": f"{PROJECT}/records-{run_id}:{artifact.version}",
+                "source_artifacts": [f"{PROJECT}/source-{run_id}:{item.version}"
+                                     for item in artifacts if item.type == "experiment-source"
+                                     and item.name.split(":")[0] == f"source-{run_id}"],
+                "files": sorted(required | ({"failure.json"} & set(entries))),
+            }
+            write_json(metadata_path, metadata)
+        missing = [name for name in metadata["files"] if not (directory / name).exists()]
+        if missing:
+            artifact = self.remote(lambda api: api.artifact(metadata["records_artifact"]))
+            for name in missing:
+                self.remote(lambda api, name=name: artifact.get_entry(name).download(
+                    root=str(directory),
+                ))
+        config, rows, checks = validate_records(directory)
+        print(f"{run_id}: {'downloaded' if missing else 'cached'}, "
+              f"{checks['rows']} rows, {checks['status']}", flush=True)
+        return metadata, config, rows, checks
+
+
+def export_group(group_id, group, reader, output_root):
+    """Export one explicitly selected comparison without combining different PB sizes."""
+
+    runs = group["runs"]
+    if len({item["id"] for item in runs}) != len(runs):
+        raise ValueError(f"{group_id}: duplicate run IDs")
+    loaded = [reader.fetch(item["id"], item.get("records_version")) for item in runs]
+    reference = loaded[0][1]
+    components = set()
+    for _, config, _, _ in loaded:
+        if (config["problem"] != reference["problem"]
+                or config["experiment"] != reference["experiment"]):
+            raise ValueError(f"{group_id}: common problem/data/initialization/budget differ")
+        if "pb" in config.get("algorithm", {}):
+            components.add(config["algorithm"]["pb"]["M"])
+    if len(components) > 1:
+        raise ValueError(f"{group_id}: multiple PB component counts {sorted(components)}")
+
+    output = output_root / group_id.lower()
+    output.mkdir(parents=True, exist_ok=True)
+    with (output / "objectives.csv").open("w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["run_id", "label", "iteration", "objective"])
+        for item, (_, _, rows, _) in zip(runs, loaded):
+            writer.writerows([item["id"], item["label"], row["iteration"], row["objective"]]
+                             for row in rows)
+    summaries = []
+    for item, (metadata, config, _, checks) in zip(runs, loaded):
+        summaries.append({"run_id": item["id"], "label": item["label"], **checks,
+                          "method": config["method"],
+                          "control": config["control"]["strategy"],
+                          "lr": config["control"]["lr"], "url": metadata["url"]})
+    with (output / "summary.csv").open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=list(summaries[0]))
+        writer.writeheader()
+        writer.writerows(summaries)
+    curves = [(item["id"], [int(row["iteration"]) for row in rows],
+               [float(row["objective"]) for row in rows])
+              for item, (_, _, rows, _) in zip(runs, loaded)]
+    for extension in ("png", "svg"):
+        plot_objective_series(curves, output / f"objective_log.{extension}",
+                              labels=[item["label"] for item in runs], title=group["title"],
+                              statuses=[checks["status"] for _, _, _, checks in loaded])
+    write_json(output / "manifest.json", {
+        "project": PROJECT, "group": group_id, "title": group["title"],
+        "runs": [{"label": item["label"], **metadata, "validation": checks}
+                 for item, (metadata, _, _, checks) in zip(runs, loaded)],
+    })
+    print(f"{group_id}: validated and exported to {output}", flush=True)
+
+
+def export_selected_groups(args, parser):
+    for path in (args.cache, args.output):
+        if not path.resolve().is_relative_to(ROOT):
+            parser.error("Cache and output must be inside this project")
+    os.environ["MPLCONFIGDIR"] = str(ROOT / "TMP/matplotlib")
+    os.environ["XDG_CACHE_HOME"] = str(ROOT / "TMP/cache")
+    groups = read_json(args.groups)
+    selected = list(groups) if args.all else args.group
+    if any(key not in groups for key in selected):
+        parser.error(f"Unknown group; available: {', '.join(groups)}")
+    reader = RecordReader(args.cache, args.offline)
+    status_path = args.output / "status.json"
+    status = {"groups_file": str(args.groups.resolve()), "groups": {}}
+    for group_id in selected:
+        status["groups"][group_id] = {"status": "running"}
+        write_json(status_path, status)
+        try:
+            export_group(group_id, groups[group_id], reader, args.output)
+        except Exception as error:
+            message = f"{type(error).__name__}: {error}"
+            status["groups"][group_id] = {"status": "failed", "error": message}
+            print(f"{group_id}: FAILED: {message}", flush=True)
+        else:
+            status["groups"][group_id] = {"status": "completed"}
+        write_json(status_path, status)
+    if any(item["status"] != "completed" for item in status["groups"].values()):
+        raise SystemExit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, nargs="+", required=True,
-                        help="One or more directories containing config.json and history.csv")
-    parser.add_argument("--output", type=Path, required=True, help="Output figure path")
+    parser.add_argument("--input", type=Path, nargs="+",
+                        help="Experiment directories, or one chart CSV with --wandb-csv")
+    parser.add_argument("--output", type=Path, help="Output figure path or group export directory")
+    parser.add_argument("--labels", nargs="+", help="W&B CSV legend labels in column order")
+    parser.add_argument("--title", help="W&B CSV figure title")
     mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--wandb-csv", action="store_true",
+                      help="Plot objective columns from one exported W&B chart CSV")
     mode.add_argument("--training", action="store_true",
                       help="Plot training objective and test MSE for nonlinear regression")
     mode.add_argument("--modified-energy", action="store_true",
                       help="Plot quadratic modified energies and baseline objective references")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--group", nargs="+", help="Download and plot comparison groups")
+    selection.add_argument("--all", action="store_true", help="Download and plot all groups")
+    parser.add_argument("--groups", type=Path, default=GROUPS)
+    parser.add_argument("--cache", type=Path, default=CACHE)
+    parser.add_argument("--offline", action="store_true", help="Use cached W&B records")
     args = parser.parse_args()
-    if args.modified_energy:
+    if args.group or args.all:
+        if args.input or args.wandb_csv or args.training or args.modified_energy or args.labels or args.title:
+            parser.error("Group export cannot be combined with local plotting options")
+        args.output = args.output or ROOT / "TMP/experiment_exports"
+        export_selected_groups(args, parser)
+        return
+    if not args.input or not args.output:
+        parser.error("Local plotting requires --input and --output")
+    if (args.labels is not None or args.title is not None) and not args.wandb_csv:
+        parser.error("--labels and --title require --wandb-csv")
+    if args.wandb_csv:
+        if len(args.input) != 1:
+            parser.error("--wandb-csv requires exactly one CSV file")
+        plot_wandb_csv(args.input[0], args.output, labels=args.labels, title=args.title)
+    elif args.modified_energy:
         plot_modified_energy(args.input, args.output)
     elif args.training:
         plot_training_curves(args.input, args.output)

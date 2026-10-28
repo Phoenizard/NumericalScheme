@@ -1,6 +1,57 @@
 """Fixed settings for each problem; research variables belong to the CLI."""
 
+WANDB = {
+    "entity": "pheonizard-university-of-nottingham",
+    "project": "NumericalScheme",
+    "init_timeout": 30,
+    "finish_timeout": 60,
+}
+
 PROBLEMS = {
+    "darcy_deeponet": {
+        # 论文已披露参数及本地默认细节见 doc/experiments/darcy_deeponet.md。
+        "grid_size": 33,
+        "n_train": 128,
+        "n_test": 64,
+        "correlation_length": 0.12,
+        "permeability_values": [3.0, 12.0],
+        "field_threshold": 0.0,
+        "gaussian_mode": "reflect",
+        "gaussian_truncate": 4.0,
+        "reference_residual_tol": 1e-10,
+        "data_seed": 42,
+        "data_path": "data/darcy_deeponet.pt",
+        "conv_channels": [8, 16, 32],
+        "conv_kernels": [5, 3, 3],
+        "conv_strides": [1, 2, 2],
+        "conv_paddings": [2, 1, 1],
+        "pool_size": 4,
+        "latent_dim": 64,
+        "trunk_hidden_layers": 3,
+        "init_seed": 42,
+        "lr": 1e-2,
+        "steps": 5000,
+        "lambda_reg": 3e-5,
+        "sgd": {"momentum": 0.9},
+        "total_shift": 0.0,
+        "pb_sav_momentum": {
+            "momentum": 0.9,
+            "alpha": 0.5,
+            "reference_run": None,  # Set entity/project/run_id here or pass --reference-run.
+            "amsgrad": {"lr": 3e-3, "relax": True, "beta2": 0.999, "eps": 1e-8},
+        },
+        "pb_esav_momentum": {
+            "momentum": 0.9,
+            "alpha": 0.5,
+            "reference_run": None,  # Set entity/project/run_id here or pass --reference-run.
+            "amsgrad": {"lr": 3e-3, "relax": True, "beta2": 0.999, "eps": 1e-8},
+        },
+        "relax": False,
+        "line_search": None,
+        "device": "cpu",
+        "dtype": "float64",
+        "num_threads": 4,
+    },
     "quadratic": {
         # 问题与初值
         "dimension": 100,
@@ -24,6 +75,7 @@ PROBLEMS = {
         # 计算
         "device": "cpu",
         "dtype": "float64",
+        "num_threads": 4,
     },
     "nonlinear_regression": {
         # 数据：等距采样，y = sin(2πx) + Gaussian noise
@@ -41,7 +93,7 @@ PROBLEMS = {
         "hidden_init_max": 1.0,
         "init_seed": 2,
         # 输出层初始化范围为 ±1 / sqrt(hidden_width)
-        # 训练：全量样本，无动量；600 次接受的更新
+        # 训练：全量样本；600 次更新
         "lr": 100.0,  # 每轮 Armijo 回溯的初始学习率，也是学习率上限
         "steps": 600,
         "lambda_reg": 0.0,
@@ -56,8 +108,13 @@ PROBLEMS = {
         "total_shift": 1e-10,
         "adamw": {"betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0},
         "reference_baseline_lr": 0.1,
+        # 动量对照采用固定学习率；单位缩放、Relax 关闭。
+        "sgd": {"lr": 0.1, "momentum": 0.9},
+        "pb_sav_momentum": {"lr": 0.1, "momentum": 0.9, "alpha": 0.5},
+        "pb_esav_momentum": {"lr": 0.1, "momentum": 0.9, "alpha": 0.5},
         # 计算
         "device": "cpu",
         "dtype": "float64",
+        "num_threads": 4,
     },
 }
