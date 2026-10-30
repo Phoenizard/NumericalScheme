@@ -135,11 +135,11 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                 if state is None:
                     state = pb_sav_momentum.initialize(parameters, terms, total_shift)
                 row.update(r=state["q"].item(), r_current=(energy + total_shift).sqrt().item())
-            elif method in ("inverse_sav", "pb_inverse_sav", "csav"):
+            elif method in ("inverse_sav", "pb_inverse_sav"):
                 shifted = energy + total_shift
                 if not torch.isfinite(shifted).all() or (shifted <= 0).any():
                     raise FloatingPointError(f"{method} requires E+C>0 at iteration {iteration}")
-                current = shifted if method == "csav" else shifted.reciprocal()
+                current = shifted.reciprocal()
                 if q is None:
                     q = current.detach().clone()
                 row.update(r=q.item(), r_current=current.item())

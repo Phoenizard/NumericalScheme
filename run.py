@@ -53,7 +53,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
     step_fn = {
         "gd": gd.step, "sav": sav.step, "pb_sav": pb_sav.step, "pb_esav": pb_esav.step,
         "pb_naive_esav": pb_naive_esav.step,
-        "esav": esav.step, "csav": None,
+        "esav": esav.step,
         "besav": besav.step, "pb_besav": pb_besav.step,
         "mesav": mesav.step, "pb_mesav": pb_mesav.step,
         "naive_esav": naive_esav.step, "sgd": sgd.step, "adamw": adamw.step,
@@ -62,8 +62,6 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         "pb_sav_momentum": pb_sav_momentum.step,
         "pb_esav_momentum": pb_esav_momentum.step,
     }[method]
-    if method == "csav":
-        from optimizer.csav import step as step_fn
     is_esav = method in ("esav", "pb_esav")
     is_besav = method in ("besav", "pb_besav")
     is_mesav = method in ("mesav", "pb_mesav")
@@ -75,7 +73,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         raise ValueError("--scheme is only used by PB-naiveESAV")
     scheme = (scheme or "plan1") if method == "pb_naive_esav" else None
     total_shift = settings["total_shift"] if method in (
-        "sav", "csav", "pb_sav", "inverse_sav", "pb_inverse_sav",
+        "sav", "pb_sav", "inverse_sav", "pb_inverse_sav",
         "mesav", "pb_mesav", "pb_sav_momentum",
     ) else None
     if relax is None:
@@ -130,13 +128,6 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             total_auxiliary="1/(E+C)", auxiliary_state="r", modified_energy="1/r",
             source="optimizer/Inverse_sav.py",
             pullback="centered_component_covariance" if method == "pb_inverse_sav" else None,
-        )
-    elif method == "csav":
-        if relax:
-            raise ValueError("CSAV does not use post-step Relax")
-        config.update(
-            auxiliary_variant="recovery_bounded_feedback", total_auxiliary="E + C",
-            auxiliary_state="r", modified_energy="r", source="optimizer/csav.py",
         )
     elif method == "pb_naive_esav":
         config["esav_variant"] = "naive"
@@ -271,7 +262,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         if m not in (1, 2, 4, 8, 15, 16, 30):
             raise ValueError("Specify --m from 1, 2, 4, 8, 15, 16, 30")
         single_energy_methods = (
-            "sav", "csav", "esav", "naive_esav", "inverse_sav", "mesav", "besav",
+            "sav", "esav", "naive_esav", "inverse_sav", "mesav", "besav",
         )
         if method in single_energy_methods and m != 1:
             raise ValueError("Single-energy methods require --m 1")
@@ -316,7 +307,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             raise ValueError("--m is only used by nonlinear_regression")
         loss = loss or (
             "total" if method in (
-                "csav", "esav", "naive_esav", "inverse_sav", "sgd", "adamw", "mesav", "besav",
+                "esav", "naive_esav", "inverse_sav", "sgd", "adamw", "mesav", "besav",
             ) else "split"
         )
         x = quadratic.init_parameters(settings)
@@ -342,7 +333,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
                 if loss == "split" else [list(range(x.numel()))]
             ),
             components=2 if method not in (
-                "sav", "csav", "esav", "naive_esav", "inverse_sav", "mesav", "besav",
+                "sav", "esav", "naive_esav", "inverse_sav", "mesav", "besav",
             ) and loss == "split" else 1,
             line_search=line_search,
             step_policy="fixed" if line_search is None else "armijo_lr_reset",
@@ -454,7 +445,7 @@ def main():
     parser.add_argument(
         "--method",
         choices=[
-            "gd", "sgd", "adamw", "sav", "csav", "esav", "naive_esav", "pb_sav",
+            "gd", "sgd", "adamw", "sav", "esav", "naive_esav", "pb_sav",
             "pb_esav", "pb_naive_esav", "besav", "pb_besav",
             "inverse_sav", "pb_inverse_sav", "mesav", "pb_mesav",
             "pb_sav_momentum", "pb_esav_momentum",
@@ -472,7 +463,7 @@ def main():
     parser.add_argument("--m", type=int, choices=[1, 2, 4, 8, 15, 16, 30],
                         help="Number of nonlinear-regression energy components")
     parser.add_argument("--loss", choices=["split", "total"],
-                        help="Quadratic energy splitting (CSAV/ESAV/SGD/AdamW default: total)")
+                        help="Quadratic energy splitting (ESAV/SGD/AdamW default: total)")
     parser.add_argument("--reference-run",
                         help="Completed SGD reference: entity/project/run_id (PB momentum only)")
     args = parser.parse_args()

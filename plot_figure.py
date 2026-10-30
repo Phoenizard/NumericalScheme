@@ -262,8 +262,6 @@ def plot_experiment(input_dir, output):
             if config["scheme"] == "plan1":
                 label += f", eta = {config.get('eta', 1.0):g}"
         modified_label = r"$r^n$" if config.get("linearized") else r"$\log r^n$"
-    elif method == "csav":
-        label, modified_label = "CSAV", r"$r^n$"
     elif method in ("inverse_sav", "pb_inverse_sav"):
         label = "Inverse SAV" if method == "inverse_sav" else "PB-Inverse SAV"
         modified_label = r"$1/r^n$"
@@ -312,7 +310,7 @@ def plot_comparison(input_dirs, output):
 
     has_auxiliary = any(
         any(key in rows[0] for key in (
-            "r_over_exp_E", "r_over_exp_auxiliary_energy", "q_over_Q", "r_over_E_plus_C",
+            "r_over_exp_E", "r_over_exp_auxiliary_energy", "q_over_Q",
             "r_times_E_plus_C",
         )) for _, rows in experiments
     )
@@ -325,7 +323,6 @@ def plot_comparison(input_dirs, output):
     has_new_esav = False
     has_besav = False
     has_mesav = False
-    has_csav = False
     has_inverse = False
     signed_ratio = False
     ratio_min = float("inf")
@@ -352,14 +349,6 @@ def plot_comparison(input_dirs, output):
             ratio_key = "r_times_E_plus_C"
             shifts.add(config["total_shift"])
             has_inverse = True
-        elif method == "csav":
-            label = "CSAV"
-            color, style, marker = "#8b3fb0", "-", "v"
-            marker_start = 5
-            linewidth = 2.4
-            ratio_key = "r_over_E_plus_C"
-            shifts.add(config["total_shift"])
-            has_csav = True
         elif method in BESAV_STYLES:
             label, color, style, marker = BESAV_STYLES[method]
             ratio_key = "r_over_exp_auxiliary_energy"
@@ -459,8 +448,6 @@ def plot_comparison(input_dirs, output):
         ratio_label += ("\n" if ratio_label else "") + (
             r"$r^n/\exp(E(x^n)/(E(x^n)+E^0))$ (BESAV/PB)"
         )
-    if has_csav:
-        ratio_label += ("\n" if ratio_label else "") + r"$r^n/[E(x^n)+C]$ (CSAV)"
     if has_mesav:
         ratio_label += ("\n" if ratio_label else "") + (
             r"$r^n/[\exp(E(x^n)/(E(x^0)+C))\sqrt{E(x^n)+C}]$ (MESAV/PB)"
@@ -537,7 +524,7 @@ def plot_modified_energy(input_dirs, output):
     fig, axes = plt.subplots(1, len(groups), figsize=(7 * len(groups), 6.2),
                              layout="constrained", squeeze=False)
     for axis, (lr, group) in zip(axes[0], groups.items()):
-        order = {"gd": 0, "sgd": 0, "adamw": 1, "csav": 2, "sav": 2, "pb_sav": 3,
+        order = {"gd": 0, "sgd": 0, "adamw": 1, "sav": 2, "pb_sav": 3,
                  "esav": 4, "naive_esav": 5, "pb_naive_esav": 6, "pb_esav": 7,
                  "inverse_sav": 8, "pb_inverse_sav": 9}
         order.update({method: 10 + index for index, method in enumerate(MESAV_STYLES)})
@@ -555,9 +542,6 @@ def plot_modified_energy(input_dirs, output):
                 )
                 style = "-"
                 energy_key = "objective"
-            elif method == "csav":
-                label = r"CSAV: $r^n$"
-                color, style, marker, start = "#8b3fb0", "-", "v", 5
             elif method in ("inverse_sav", "pb_inverse_sav"):
                 label = "Inverse SAV" if method == "inverse_sav" else "PB-Inverse SAV"
                 label += r": $1/r^n$"
@@ -678,7 +662,6 @@ def plot_training_curves(input_dirs, output):
         ("gd", None): ("GD", "#333333", "-.", None),
         ("sgd", None): ("SGD", "#333333", "-.", None),
         ("adamw", None): ("AdamW", "#007c91", "-", None),
-        ("csav", None): ("CSAV", "#8b3fb0", "-", "v"),
         ("inverse_sav", None): ("Inverse SAV", "#8b3fb0", "-", "v"),
         ("pb_inverse_sav", None): ("PB-Inverse SAV", "#009e73", "-", "D"),
         ("naive_esav", None): ("naiveESAV", "#d89b00", "-", None),

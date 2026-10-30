@@ -31,12 +31,12 @@ def build_config(resolved):
     expressions = {
         "sav": "sqrt(E+C)", "esav": "exp(E/(4*E_0))",
         "besav": "exp(E/(E+E_0))", "mesav": "exp(E/(E_0+C))*sqrt(E+C)",
-        "naive_esav": "exp(E)", "inverse_sav": "1/(E+C)", "csav": "E+C",
+        "naive_esav": "exp(E)", "inverse_sav": "1/(E+C)",
     }
     algorithm = {}
     if base in expressions:
         auxiliary = {"expression": expressions[base]}
-        if base in ("sav", "mesav", "inverse_sav", "csav"):
+        if base in ("sav", "mesav", "inverse_sav"):
             auxiliary["C"] = resolved["total_shift"]
         if base in ("esav", "besav", "mesav"):
             auxiliary["E_0"] = resolved.get("initial_energy", resolved.get("reference_energy"))
