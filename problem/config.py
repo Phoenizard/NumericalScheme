@@ -9,7 +9,7 @@ WANDB = {
 
 PROBLEMS = {
     "darcy_deeponet": {
-        # 论文已披露参数及本地默认细节见 doc/experiments/darcy_deeponet.md。
+        # 论文已披露参数与本地默认细节；尚无对应实验报告。
         "grid_size": 33,
         "n_train": 128,
         "n_test": 64,

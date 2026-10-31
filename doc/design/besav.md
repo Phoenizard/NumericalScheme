@@ -167,4 +167,4 @@ Armijo 接受步真实目标非增，映射又单调，因此一致初始化后�
 - 当前实验支持继续探索 BESAV。非线性固定学习率 10 被标注为当前观察到的舒适区之外，保留实际失败，不推导其余学习率均稳定。
 - 尚需解释非线性大分组 Relax 模式与 Relax-PB-SAV 的差距，以及有界映射对长期反馈的作用。若改善仅来自 PB 或 Relax，不能将其归为基础有界映射的贡献；正式接口接入不等于已完成科研贡献论证。
 
-实现：[BESAV](../../optimizer/besav.py)、[PB-BESAV](../../optimizer/pb_besav.py)，均通过 `step(..., relax=True)` 开启上述 Relax，默认关闭。命令行使用 `--method besav/pb_besav` 加 `--relax`。实验见[二次型](../experiments/quadratic.md#4-besav-及其扩展)、[非线性回归](../experiments/nonlinear_regression.md#4-besav-及其扩展)。早期推导与验证见[复现资料](../../results/reproduction_besav_20261024/README.md)。
+实现：[BESAV](../../optimizer/besav.py)、[PB-BESAV](../../optimizer/pb_besav.py)，均通过 `step(..., relax=True)` 开启上述 Relax，默认关闭。命令行使用 `--method besav/pb_besav` 加 `--relax`。实验见[二次型](https://github.com/Phoenizard/NumericalScheme/blob/deac8e0e3591a4b618b86d759e73cf4019019d0b/doc/experiments/quadratic.md#4-besav-及其扩展)、[非线性回归](https://github.com/Phoenizard/NumericalScheme/blob/deac8e0e3591a4b618b86d759e73cf4019019d0b/doc/experiments/nonlinear_regression.md#4-besav-及其扩展)。早期推导与验证的复现资料 `results/reproduction_besav_20261024/` 未纳入版本库。

@@ -49,7 +49,7 @@ $$
 $\alpha=0$ 为普通 ESAV 动量，$\alpha=1$ 使用完整 PB-ESAV 矩阵。
 分量辅助比值为零时，数值实现沿用 torch.finfo(dtype).tiny。
 
-SAV 原文式 (28) 的动量平衡为（此处 $B_\alpha^n$ 取 [SAV 的矩阵定义](SAV-Moment.md)）
+SAV 原文式 (28) 的动量平衡为（此处 $B_\alpha^n$ 取 [SAV 的矩阵定义](sav_moment.md)）
 
 $$
 \frac{p^{n+1}-\beta p^n}{\eta}

@@ -6,7 +6,7 @@
 | --- | --- |
 | SAV / naiveESAV | 均已实现。naiveESAV 指原始 $r=\exp(E)$ 方法，在当前二次型实验中失败。 |
 | [RE-SAV](https://arxiv.org/abs/2204.06258) | 预测位置的多项式修正与 Relax 仍为待办，尚未实现；与现有 naiveESAV 加完全 Relax 区分。 |
-| PB-naiveESAV / PB-ESAV | 原 PB Naive ESAV 统一改名为 PB-naiveESAV；新辅助变量方案保留 PB-ESAV。新辅助变量的单能量 ESAV 已实现于 `optimizer/esav.py`，Armijo 二次型结果见 [Validation](Validation.md)。 |
+| PB-naiveESAV / PB-ESAV | 原 PB Naive ESAV 统一改名为 PB-naiveESAV；新辅助变量方案保留 PB-ESAV。新辅助变量的单能量 ESAV 已实现于 `optimizer/esav.py`，Armijo 二次型结果原记于 `Validation.md`（未纳入版本库）。 |
 
 ## Review naiveESAV
 

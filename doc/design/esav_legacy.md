@@ -565,9 +565,9 @@ $$
 
 对一般能量，本方案得到的是与 PB-SAV 相同的归一化外积结构；其与黑塞矩阵的具体对应取决于能量形式。
 
-实验：[二次型](../experiments/quadratic.md)、[非线性回归](../experiments/nonlinear_regression.md)。
+实验：[二次型](https://github.com/Phoenizard/NumericalScheme/blob/deac8e0e3591a4b618b86d759e73cf4019019d0b/doc/experiments/quadratic.md)、[非线性回归](https://github.com/Phoenizard/NumericalScheme/blob/deac8e0e3591a4b618b86d759e73cf4019019d0b/doc/experiments/nonlinear_regression.md)。
 
 ### 科研评价边界
 
 - 本构造按“指数内部修正 → 一阶导数变化 → 曲率修正 → 实验改善”评价；可改写为指数与根号的乘积不构成机械拼接的判据，无需额外证明 exponential 不可替代。
-- 审查问题应由具体构造及其动机决定；拿不准其科研价值或应审查的重点时，列明依据与疑点，由用户判定。约定见 [科研目标](../../GOAL.md#每次构造后的科研反思)。
+- 审查问题应由具体构造及其动机决定；拿不准其科研价值或应审查的重点时，列明依据与疑点，由用户判定。约定见 [科研目标](https://github.com/Phoenizard/NumericalScheme/blob/bd16c16e3ba04c27e9ba80155b3631650d103c5f/GOAL.md#每次构造后的科研反思)。

@@ -341,7 +341,7 @@ E(x^1)&=50.5-200.02\Delta t+200.0002\Delta t^2,\\
 $$
 
 曲率造成负的一致性偏差；比值反馈可能过冲，随后指数抑制有效学习率。
-数值停滞与首步验证见[二次型报告](../experiments/quadratic.md#naiveesav-失效诊断)。
+数值停滞与首步验证见[二次型报告](https://github.com/Phoenizard/NumericalScheme/blob/deac8e0e3591a4b618b86d759e73cf4019019d0b/doc/experiments/quadratic.md#naiveesav-失效诊断)。
 
 ### SAV 的离散耦合对照
 
