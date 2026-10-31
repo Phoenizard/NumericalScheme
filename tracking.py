@@ -32,15 +32,14 @@ def build_config(resolved):
     base = method.removeprefix("pb_").removesuffix("_momentum")
     expressions = {
         "sav": "sqrt(E+C)", "esav": "exp(E/(4*E_0))",
-        "besav": "exp(E/(E+E_0))", "mesav": "exp(E/(E_0+C))*sqrt(E+C)",
-        "naive_esav": "exp(E)", "inverse_sav": "1/(E+C)",
+        "mesav": "exp(E/(E_0+C))*sqrt(E+C)", "naive_esav": "exp(E)",
     }
     algorithm = {}
     if base in expressions:
         auxiliary = {"expression": expressions[base]}
-        if base in ("sav", "mesav", "inverse_sav"):
+        if base in ("sav", "mesav"):
             auxiliary["C"] = resolved["total_shift"]
-        if base in ("esav", "besav", "mesav"):
+        if base in ("esav", "mesav"):
             auxiliary["E_0"] = resolved.get("initial_energy", resolved.get("reference_energy"))
             components = resolved.get("initial_components", resolved.get("reference_components"))
             if method.startswith("pb_") and components is not None:

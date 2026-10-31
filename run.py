@@ -9,8 +9,8 @@ from time import perf_counter
 import torch
 
 from network.nonlinear_regression import TanhRegressor
-from optimizer import Inverse_sav, adam, adamw, besav, esav, gd, mesav, naive_esav
-from optimizer import pb_besav, pb_esav, pb_mesav, pb_naive_esav, pb_sav, sav, sgd
+from optimizer import adam, adamw, esav, gd, mesav, naive_esav
+from optimizer import pb_esav, pb_mesav, pb_naive_esav, pb_sav, sav, sgd
 from optimizer import pb_esav_momentum, pb_sav_momentum
 from problem import nonlinear_regression, quadratic
 from problem.config import PROBLEMS
@@ -58,16 +58,12 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         "adam": adam.step, "gd": gd.step, "sav": sav.step, "pb_sav": pb_sav.step, "pb_esav": pb_esav.step,
         "pb_naive_esav": pb_naive_esav.step,
         "esav": esav.step,
-        "besav": besav.step, "pb_besav": pb_besav.step,
         "mesav": mesav.step, "pb_mesav": pb_mesav.step,
         "naive_esav": naive_esav.step, "sgd": sgd.step, "adamw": adamw.step,
-        "inverse_sav": Inverse_sav.step,
-        "pb_inverse_sav": partial(Inverse_sav.step, pullback=True),
         "pb_sav_momentum": pb_sav_momentum.step,
         "pb_esav_momentum": pb_esav_momentum.step,
     }[method]
     is_esav = method in ("esav", "pb_esav")
-    is_besav = method in ("besav", "pb_besav")
     is_mesav = method in ("mesav", "pb_mesav")
     if linearized and method != "naive_esav":
         raise ValueError("--linearized is only supported by the naiveESAV")
@@ -77,8 +73,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         raise ValueError("--scheme is only used by PB-naiveESAV")
     scheme = (scheme or "plan1") if method == "pb_naive_esav" else None
     total_shift = settings["total_shift"] if method in (
-        "sav", "pb_sav", "inverse_sav", "pb_inverse_sav",
-        "mesav", "pb_mesav", "pb_sav_momentum",
+        "sav", "pb_sav", "mesav", "pb_mesav", "pb_sav_momentum",
     ) else None
     if relax is None:
         if is_pb_momentum and mobility == "amsgrad":
@@ -87,15 +82,6 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             relax = settings["relax"] if method not in ("gd", "sgd", "adamw", "adam") else False
     elif relax and method in ("gd", "sgd", "adamw", "adam"):
         raise ValueError(f"{method} does not use Relax")
-    if is_besav:
-        config.update(
-            total_auxiliary="exp(E/(E+E0))", auxiliary_state="log_r",
-            modified_energy="log_r", reference_policy="frozen_initial_energy",
-        )
-        if method == "pb_besav":
-            config["B_definition"] = "sum_i E_i0/(E_i+E_i0)^2 * grad(E_i) grad(E_i).T"
-        if relax:
-            config["relaxation_update"] = "log_r_next = min(E_next/(E_next+E0), log_r_old)"
     if is_esav:
         config.update(
             total_auxiliary="exp(E/(4*E0))", auxiliary_state="log_r",
@@ -125,15 +111,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             )
     if method == "naive_esav" and linearized and relax:
         raise ValueError("Full Relax requires naiveESAV (linearized=False)")
-    if method in ("inverse_sav", "pb_inverse_sav"):
-        if relax:
-            raise ValueError("Inverse SAV does not use Relax")
-        config.update(
-            total_auxiliary="1/(E+C)", auxiliary_state="r", modified_energy="1/r",
-            source="optimizer/Inverse_sav.py",
-            pullback="centered_component_covariance" if method == "pb_inverse_sav" else None,
-        )
-    elif method == "pb_naive_esav":
+    if method == "pb_naive_esav":
         config["esav_variant"] = "naive"
     elif method == "naive_esav":
         step_fn = partial(step_fn, linearized=linearized)
@@ -281,7 +259,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         if m not in (1, 2, 4, 8, 15, 16, 30):
             raise ValueError("Specify --m from 1, 2, 4, 8, 15, 16, 30")
         single_energy_methods = (
-            "sav", "esav", "naive_esav", "inverse_sav", "mesav", "besav",
+            "sav", "esav", "naive_esav", "mesav",
         )
         if method in single_energy_methods and m != 1:
             raise ValueError("Single-energy methods require --m 1")
@@ -340,7 +318,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             raise ValueError("--m is only used by nonlinear_regression")
         loss = loss or (
             "total" if method in (
-                "esav", "naive_esav", "inverse_sav", "sgd", "adamw", "mesav", "besav",
+                "esav", "naive_esav", "sgd", "adamw", "mesav",
             ) else "split"
         )
         x = quadratic.init_parameters(settings)
@@ -366,7 +344,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
                 if loss == "split" else [list(range(x.numel()))]
             ),
             components=2 if method not in (
-                "sav", "esav", "naive_esav", "inverse_sav", "mesav", "besav",
+                "sav", "esav", "naive_esav", "mesav",
             ) and loss == "split" else 1,
             line_search=line_search,
             step_policy="fixed" if line_search is None else "armijo_lr_reset",
@@ -395,14 +373,6 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
                               component_ratio_zero_epsilon=torch.finfo(
                                   initial_state["log_r"].dtype).tiny)
         config["momentum_initialization"] = "p=0; displacement=M*p"
-    if is_besav:
-        initializer = pb_besav if method == "pb_besav" else besav
-        with torch.no_grad():
-            initial_state = initializer.initialize(loss_fn())
-        config.update(
-            initial_energy=initial_state["initial_energy"].item(),
-            initial_components=initial_state["initial_components"].tolist(),
-        )
     if is_esav:
         initializer = pb_esav if method == "pb_esav" else esav
         with torch.no_grad():
@@ -483,8 +453,7 @@ def main():
         "--method",
         choices=[
             "gd", "sgd", "adamw", "adam", "sav", "esav", "naive_esav", "pb_sav",
-            "pb_esav", "pb_naive_esav", "besav", "pb_besav",
-            "inverse_sav", "pb_inverse_sav", "mesav", "pb_mesav",
+            "pb_esav", "pb_naive_esav", "mesav", "pb_mesav",
             "pb_sav_momentum", "pb_esav_momentum",
         ],
         default="pb_sav",

@@ -76,7 +76,7 @@ $$
 
 ## 已完成结果
 
-图表直接引用已归档的探索实验记录，曲线未平滑。[原始 CSV、历史源码与完整探索快照](archive/learning_rate_strategy/exploration_snapshot.tar.gz)保存在压缩归档中；下方索引内的相对路径以归档中的 `fig3_reproduction/` 为基准。比较均对齐上述数据、初值和预算。图例中的 SGD / GD 指同一全批量 GD 记录。
+图表直接引用已归档的探索实验记录，曲线未平滑。[原始 CSV、历史源码与完整探索快照](../../results/learning_rate_strategy/exploration_snapshot.tar.gz)保存在压缩归档中；下方索引内的相对路径以归档中的 `fig3_reproduction/` 为基准。比较均对齐上述数据、初值和预算。图例中的 SGD / GD 指同一全批量 GD 记录。
 
 ### Figure 3 基线验收
 
@@ -86,7 +86,7 @@ $$
 
 该组 SAV、PB-SAV 使用完整 Relax。600 步目标值依次为：SAV $5.9213657\times10^{-2}$，PB-SAV 8 组 $8.4137187\times10^{-3}$，PB-SAV 30 组 $2.5386777\times10^{-3}$。GN 为归档参照，不在本次正式入口增加 GN 方法。
 
-[验收配置](archive/learning_rate_strategy/accepted_config.json) · [验收来源](archive/learning_rate_strategy/accepted_manifest.json) · [共同策略核对](archive/learning_rate_strategy/learning_rate_audit.json)
+[验收配置](../../results/learning_rate_strategy/accepted_config.json) · [验收来源](../../results/learning_rate_strategy/accepted_manifest.json) · [共同策略核对](../../results/learning_rate_strategy/learning_rate_audit.json)
 
 ### 基础方法与 Relax
 
@@ -101,7 +101,7 @@ $$
 | GD | — | 0.0304983310 |
 | Adam | — | 0.0028921447 |
 
-[六曲线原始 CSV、哈希与在线记录索引](archive/learning_rate_strategy/basic_comparison.json)
+[六曲线原始 CSV、哈希与在线记录索引](../../results/learning_rate_strategy/basic_comparison.json)
 
 ### PB：Relax 关闭
 
@@ -115,7 +115,7 @@ $$
 
 PB-SAV 16 组出现有限值停滞；600 步时 $q/\sqrt{E+C}\approx3.32\times10^{-13}$，保留原始曲线。
 
-[十曲线原始 CSV、哈希与在线记录索引](archive/learning_rate_strategy/pb_comparison.json)
+[十曲线原始 CSV、哈希与在线记录索引](../../results/learning_rate_strategy/pb_comparison.json)
 
 ## 当前结论与正式入口
 
@@ -149,4 +149,4 @@ python -B run.py --problem nonlinear_regression --method adam --m 1
 | 学习率与回溯次数 | 全部通过逐点核对 |
 | 保留设置 | 二次型、Darcy、非线性动量配置与迁移前一致 |
 
-[逐项误差、12 个在线 run 与原始记录来源](learning_rate_strategy_validation.json)。本节为代码迁移验证；上文图表保留已验收的原始记录。
+[逐项误差、12 个在线 run 与原始记录来源](../../results/learning_rate_strategy/learning_rate_strategy_validation.json)。本节为代码迁移验证；上文图表保留已验收的原始记录。

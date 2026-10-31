@@ -71,7 +71,7 @@ PROBLEMS = {
         # SAV 系列的总 shift；ESAV / PB-ESAV 使用冻结初始能量，不使用 shift
         "total_shift": 1e-10,
         "adamw": {"betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0},
-        "reference_baseline_lr": 0.1,  # Fixed-rate SGD/AdamW reference in inverse-SAV research.
+        "reference_baseline_lr": 0.1,  # Fixed-rate SGD/AdamW reference.
         # 计算
         "device": "cpu",
         "dtype": "float64",
