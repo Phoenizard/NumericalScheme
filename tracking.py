@@ -33,13 +33,16 @@ def build_config(resolved):
     expressions = {
         "sav": "sqrt(E+C)", "esav": "exp(E/(4*E_0))",
         "mesav": "exp(E/(E_0+C))*sqrt(E+C)", "naive_esav": "exp(E)",
+        "sesav": "exp(k*E/E_0)",
     }
     algorithm = {}
     if base in expressions:
         auxiliary = {"expression": expressions[base]}
         if base in ("sav", "mesav"):
             auxiliary["C"] = resolved["total_shift"]
-        if base in ("esav", "mesav"):
+        if base == "sesav":
+            auxiliary["k"] = resolved["sesav_k"]
+        if base in ("esav", "mesav", "sesav"):
             auxiliary["E_0"] = resolved.get("initial_energy", resolved.get("reference_energy"))
             components = resolved.get("initial_components", resolved.get("reference_components"))
             if method.startswith("pb_") and components is not None:
@@ -81,7 +84,7 @@ def build_config(resolved):
     if resolved.get("step_policy") == "curvature_damping":
         control.update(strategy="curvature_damping", controller=resolved["controller"])
     experiment = {}
-    if problem == "quadratic":
+    if problem.startswith("quadratic"):
         experiment.update(dimension=resolved["dimension"], initial_value=resolved["initial_value"])
     else:
         data_path = Path(resolved["data_path"])

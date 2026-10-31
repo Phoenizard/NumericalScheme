@@ -128,9 +128,23 @@ PROBLEMS = {
         "sgd": {"lr": 0.1, "momentum": 0.9},
         "pb_sav_momentum": {"lr": 0.1, "momentum": 0.9, "alpha": 0.5},
         "pb_esav_momentum": {"lr": 0.1, "momentum": 0.9, "alpha": 0.5},
+        # SESAV：r = exp(k E/E0)
+        "sesav": {"k": 16.0},
         # 计算
         "device": "cpu",
         "dtype": "float64",
         "num_threads": 4,
     },
+}
+
+# 二次型固定学习率平台（SESAV 实验）：固定 0.9、3000 步、无线搜索；辅助变量方法开 Relax。
+PROBLEMS["quadratic_fixed_lr"] = {
+    **PROBLEMS["quadratic"],
+    "lr": 0.9,
+    "steps": 3000,
+    "relax": True,
+    "line_search": None,
+    "reference_baseline_lr": 0.1,  # Fixed-rate AdamW / Adam reference.
+    "adam": {"betas": (0.9, 0.999), "eps": 1e-8},
+    "sesav": {"k": 16.0},
 }

@@ -93,7 +93,7 @@ $M=2$，$K=300$；Armijo。与 A1 的基础方法比较 PB 的作用，复用 A1
 | [PB-SAV](https://forge.coreweave.com/wandb/pheonizard-university-of-nottingham/NumericalScheme/runs/d3b4d07c7275) | 开 | $1.124140\times10^{-16}$ |
 | [PB-ESAV](https://forge.coreweave.com/wandb/pheonizard-university-of-nottingham/NumericalScheme/runs/bfee6830c639) | 开 | $4.736856\times10^{-39}$ |
 
-判断：PB-ESAV 的最终目标约为 $10^{-39}$；在本组开、关 Relax 的两对比较中均低于对应 PB-SAV。
+判断：PB-ESAV 的最终目标约为 $10^{-39}$；在本组开、关 Relax 的两对比较中均低于对应 PB-SAV。该数值是以零为最小点的平方和目标值，对应的最终解误差分别约为 $8.99\times10^{-19}$、$6.68\times10^{-19}$；精度含义见[实验报告 B1](esav_experiments.md#b1-pb-与-relax-的组合)。
 
 ## C 非线性基础方法
 

@@ -90,7 +90,7 @@ def controller_geometry(model, x, y, groups, method, total_shift, state):
     hidden = torch.tanh(x * model.hidden.weight.flatten() + model.hidden.bias)
     derivative = (1 - hidden.square()) * model.output.weight.flatten()
     jacobian = torch.cat((derivative * x, derivative, hidden, torch.ones_like(x)), dim=1)
-    if method == "esav":
+    if method in ("esav", "sesav"):
         return jacobian, jacobian.new_empty((jacobian.shape[1], 0))
     residual = (model(x) - y).flatten()
     if method == "sav":
@@ -104,6 +104,9 @@ def controller_geometry(model, x, y, groups, method, total_shift, state):
         ratios = (state["log_r_i"] - energies / (4 * references)).exp()
         ratios.masked_fill_(ratios == 0, torch.finfo(ratios.dtype).tiny)
         columns = gradients * (ratios / (4 * references).sqrt())
+    elif method == "pb_sesav":
+        ratio = (state["log_r"] - state["k"] * energies.sum() / state["initial_energy"]).exp()
+        columns = gradients * (ratio * (state["k"] / state["initial_components"]).sqrt())
     else:
         raise ValueError(f"No curvature controller geometry for {method}")
     return jacobian, columns

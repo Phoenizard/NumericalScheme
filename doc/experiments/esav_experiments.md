@@ -12,6 +12,7 @@ $$
 | 参数 | 二次型 | 非线性回归 |
 | --- | --- | --- |
 | 更新预算 | $K=300$ | $K=600$ |
+| 设备与精度 | CPU / float64 | CPU / float64 |
 | 数据与初值 | $\theta^0=(1,\ldots,1)\in\mathbb R^{100}$ | $N=30$；$[0,1]$ 等距采样；噪声标准差 $0.1$，种子 1 |
 | 网络与初始化 | 直接优化参数 | $1\to50\to1$，tanh；初始化种子 2 |
 | PB 分组 | 奇数与偶数坐标，$M=2$ | 嵌套随机分组，种子 3；$M=2,4,8,16,30$ |
@@ -69,6 +70,16 @@ $M=2$，$K=300$；Armijo。与 A1 的基础方法比较 PB 的作用，复用 A1
 | [PB-ESAV](https://forge.coreweave.com/wandb/pheonizard-university-of-nottingham/NumericalScheme/runs/bfee6830c639) | 开 | $4.736856\times10^{-39}$ |
 
 ![B1 优化目标的对数曲线](figures/esav/b1_quadratic_pb_log.png)
+
+本例的精确最小点为 $\boldsymbol{\theta}^\ast=\boldsymbol{0}$，目标值与解误差满足
+
+$$
+0.01\|\boldsymbol{\theta}-\boldsymbol{\theta}^\ast\|_2^2
+\le f(\boldsymbol{\theta})
+\le \|\boldsymbol{\theta}-\boldsymbol{\theta}^\ast\|_2^2.
+$$
+
+由记录的奇、偶坐标分量能量换算，PB-ESAV 关闭、开启 Relax 时的最终解误差分别约为 $8.99\times10^{-19}$、$6.68\times10^{-19}$；表中的 $10^{-39}$ 是平方和目标值的数量级。float64 的机器精度 $\varepsilon\approx2.22\times10^{-16}$ 是 1 与其后一个可表示数的间距，并非绝对数值下限（见 [NumPy 浮点精度定义](https://numpy.org/doc/stable/reference/generated/numpy.finfo.html)）。此例直接对接近零的参数平方求和，可以得到这样的目标值；这不表示获得了 39 位有效数字。
 
 ## C 非线性基础方法
 

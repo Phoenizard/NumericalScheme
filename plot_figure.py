@@ -26,6 +26,10 @@ ESAV_STYLES = {
     "pb_esav": ("PB-ESAV", "#218c60", "-", "s"),
     "relax_esav": ("Relax-ESAV", "#b3448c", "--", "D"),
     "relax_pb_esav": ("Relax-PB-ESAV", "#663b94", "--", "s"),
+    "sesav": ("SESAV", "#d55e00", "-", "D"),
+    "pb_sesav": ("PB-SESAV", "#d55e00", "-", "s"),
+    "relax_sesav": ("Relax-SESAV", "#cc3311", "--", "D"),
+    "relax_pb_sesav": ("Relax-PB-SESAV", "#cc3311", "--", "s"),
 }
 
 MESAV_STYLES = {
@@ -45,7 +49,7 @@ def load_experiment(input_dir):
     if not rows:
         raise ValueError("The experiment history is empty")
     if config.get("relax") and config["method"] in (
-        "esav", "pb_esav", "mesav", "pb_mesav",
+        "esav", "pb_esav", "sesav", "pb_sesav", "mesav", "pb_mesav",
     ):
         config["method"] = "relax_" + config["method"]
     return config, rows
