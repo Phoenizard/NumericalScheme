@@ -1,0 +1,111 @@
+{
+  "scope": "accepted R21, not exploratory rounds",
+  "training_performed": false,
+  "methods": {
+    "sav": {
+      "run_id": "6u43qpjp",
+      "policy": {
+        "controller": "curvature_gap",
+        "initial_lr": 1.0,
+        "growth": 1.1,
+        "damping_safety": 0.5,
+        "implicit_factor": 2.0,
+        "retention_safety": true,
+        "maximum_safety": 1.0,
+        "growth_envelope": true,
+        "armijo": 0.0001,
+        "relax": true,
+        "rho": 1.0
+      },
+      "loop_sha256": "0a3620075c3a752fb7558eef47cc23a130868e8cfb8459a63383b2ffa9d530bb",
+      "source_sha256": "a799d304526e8aac1f7a23dada39b61225c90e52fd41563f2dfc5b492ba923f5",
+      "archived_source": "audit_r21/sav/Challenge/fig3_reproduction/experiment.py",
+      "actual_lr_first": 0.2650089847110658,
+      "actual_lr_last": 0.11825734768230452,
+      "actual_lr_min": 0.11825734768230452,
+      "actual_lr_max": 0.2650089847110658,
+      "total_armijo_backtracks": 0,
+      "input_sha256": "163089e48357b9a8ee996fd63963dc883d1ebd931f1a3815f510f294615075fe"
+    },
+    "pb8": {
+      "run_id": "xm0waj7f",
+      "policy": {
+        "controller": "curvature_gap",
+        "initial_lr": 1.0,
+        "growth": 1.1,
+        "damping_safety": 0.5,
+        "implicit_factor": 2.0,
+        "retention_safety": true,
+        "maximum_safety": 1.0,
+        "growth_envelope": true,
+        "armijo": 0.0001,
+        "relax": true,
+        "rho": 1.0
+      },
+      "loop_sha256": "0a3620075c3a752fb7558eef47cc23a130868e8cfb8459a63383b2ffa9d530bb",
+      "source_sha256": "a799d304526e8aac1f7a23dada39b61225c90e52fd41563f2dfc5b492ba923f5",
+      "archived_source": "audit_r21/pb8/Challenge/fig3_reproduction/experiment.py",
+      "actual_lr_first": 0.6816501268421257,
+      "actual_lr_last": 0.14091234264577301,
+      "actual_lr_min": 0.14091234264577301,
+      "actual_lr_max": 0.6816501268421257,
+      "total_armijo_backtracks": 0,
+      "input_sha256": "163089e48357b9a8ee996fd63963dc883d1ebd931f1a3815f510f294615075fe"
+    },
+    "pb30": {
+      "run_id": "d3bgke6x",
+      "policy": {
+        "controller": "curvature_gap",
+        "initial_lr": 1.0,
+        "growth": 1.1,
+        "damping_safety": 0.5,
+        "implicit_factor": 2.0,
+        "retention_safety": true,
+        "maximum_safety": 1.0,
+        "growth_envelope": true,
+        "armijo": 0.0001,
+        "relax": true,
+        "rho": 1.0
+      },
+      "loop_sha256": "0a3620075c3a752fb7558eef47cc23a130868e8cfb8459a63383b2ffa9d530bb",
+      "source_sha256": "703ea6b8231c9dd696bbb141142990b961a1ffc119c9ab5c65863942284bbd80",
+      "archived_source": "audit_r21/pb30/Challenge/fig3_reproduction/experiment.py",
+      "actual_lr_first": 1.0,
+      "actual_lr_last": 100.0,
+      "actual_lr_min": 1.0,
+      "actual_lr_max": 100.0,
+      "total_armijo_backtracks": 0,
+      "input_sha256": "163089e48357b9a8ee996fd63963dc883d1ebd931f1a3815f510f294615075fe"
+    },
+    "gn": {
+      "run_id": "z6d151z0",
+      "policy": {
+        "controller": "curvature_gap",
+        "initial_lr": 1.0,
+        "growth": 1.1,
+        "damping_safety": 0.5,
+        "implicit_factor": 2.0,
+        "retention_safety": true,
+        "maximum_safety": 1.0,
+        "growth_envelope": true,
+        "armijo": 0.0001,
+        "relax": true,
+        "rho": 1.0
+      },
+      "loop_sha256": "0a3620075c3a752fb7558eef47cc23a130868e8cfb8459a63383b2ffa9d530bb",
+      "source_sha256": "703ea6b8231c9dd696bbb141142990b961a1ffc119c9ab5c65863942284bbd80",
+      "archived_source": "audit_r21/gn/Challenge/fig3_reproduction/experiment.py",
+      "actual_lr_first": 1.0,
+      "actual_lr_last": 100.0,
+      "actual_lr_min": 1.0,
+      "actual_lr_max": 100.0,
+      "total_armijo_backtracks": 0,
+      "input_sha256": "163089e48357b9a8ee996fd63963dc883d1ebd931f1a3815f510f294615075fe"
+    }
+  },
+  "archived_training_loops_identical": true,
+  "effective_policies_identical": true,
+  "configs_equal_except_method_and_groups": true,
+  "inputs_identical": true,
+  "frozen_loop_matches_archives": true
+}

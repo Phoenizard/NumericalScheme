@@ -84,21 +84,37 @@ PROBLEMS = {
         "x_min": 0.0,
         "x_max": 1.0,
         "noise_std": 0.1,
-        "noise_seed": 1,
-        "partition_seed": 3,
-        "data_path": "data/nonlinear_regression.pt",
+        "noise_seed": 42,
+        "partition_seed": 42,
+        "data_path": "data/nonlinear_regression_r21.pt",
+        "data_rng": "numpy",
+        "partition_rng": "numpy",
+        "initialization": "centered_normal",
+        "hidden_scale": 0.72,
+        "legacy_momentum": {
+            "noise_seed": 1, "partition_seed": 3, "init_seed": 2,
+            "data_path": "data/nonlinear_regression.pt", "data_rng": "torch",
+            "partition_rng": "torch", "initialization": "uniform",
+        },
+        "controller": {
+            "initial_lr": 1.0, "growth": 1.1, "min_lr": 1e-6, "max_lr": 100.0,
+            "damping_safety": 0.5, "maximum_safety": 1.0, "implicit_factor": 2.0,
+        },
+        "gd_lr": 0.22,
+        "adam_lr": 0.03,
+        "adam": {"betas": (0.9, 0.999), "eps": 1e-8},
         # 网络：1 → hidden_width → 1，单隐层 tanh
         "hidden_width": 50,
         "hidden_init_min": -1.0,
         "hidden_init_max": 1.0,
-        "init_seed": 2,
-        # 输出层初始化范围为 ±1 / sqrt(hidden_width)
+        "init_seed": 42,
+        # 当前输出层为 N(0, 1/hidden_width)；uniform 范围只供旧动量设置使用。
         # 训练：全量样本；600 次更新
-        "lr": 100.0,  # 每轮 Armijo 回溯的初始学习率，也是学习率上限
+        "lr": 100.0,  # 未迁移方法保留旧 Armijo 起点；新策略使用 controller.initial_lr。
         "steps": 600,
         "lambda_reg": 0.0,
         "relax": False,
-        # 每轮从 lr 开始，拒绝后学习率减半并重新计算候选更新
+        # 共同 Armijo 接受条件；新策略的试探起点由 controller 决定。
         "line_search": {
             "min_lr": 1e-6,
             "shrink": 0.5,

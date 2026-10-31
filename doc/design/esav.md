@@ -1,5 +1,7 @@
 # ESAV、PB-ESAV 与 Relax
 
+当前状态（2026-10-30）：本页保留现行方法的定义与推导。非线性回归在新的共同实验基线下尚未体现预期优势，研究方向转为重新设计；已有结果见[学习率策略的优化记录](../experiments/learning_rate_strategy_optimization.md)。
+
 $$
 \boxed{r=\exp\!\left(\frac{E(\theta)}{4E^0}\right),\qquad
 E^0=E(\theta^0)>0\ \text{冻结}.}

@@ -1,0 +1,23 @@
+{
+  "round": "accepted_config",
+  "init": "centered_normal",
+  "hidden_scale": 0.72,
+  "init_seed": 42,
+  "data": "numpy_legacy",
+  "data_seed": 42,
+  "partition_seed": 42,
+  "partition_rng": "numpy",
+  "initial_lr": 1.0,
+  "growth": 1.1,
+  "shift": 1e-10,
+  "relax": true,
+  "controller": "curvature_gap",
+  "damping_safety": 0.5,
+  "implicit_factor": 2.0,
+  "retention_safety": true,
+  "maximum_safety": 1.0,
+  "growth_envelope": true,
+  "expected_input_sha256": "163089e48357b9a8ee996fd63963dc883d1ebd931f1a3815f510f294615075fe",
+  "armijo": 0.0001,
+  "rho": 1.0
+}

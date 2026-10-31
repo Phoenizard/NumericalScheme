@@ -1,6 +1,7 @@
 """Run one experiment using fixed settings from problem/config.py."""
 
 import argparse
+import hashlib
 from functools import partial
 from pathlib import Path
 from time import perf_counter
@@ -8,7 +9,7 @@ from time import perf_counter
 import torch
 
 from network.nonlinear_regression import TanhRegressor
-from optimizer import Inverse_sav, adamw, besav, esav, gd, mesav, naive_esav
+from optimizer import Inverse_sav, adam, adamw, besav, esav, gd, mesav, naive_esav
 from optimizer import pb_besav, pb_esav, pb_mesav, pb_naive_esav, pb_sav, sav, sgd
 from optimizer import pb_esav_momentum, pb_sav_momentum
 from problem import nonlinear_regression, quadratic
@@ -21,7 +22,10 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
                    m=None, loss=None, linearized=False, relax: bool | None = None,
                    mobility=None, reference_run=None):
     """Assemble one problem and optimizer, then stream its records to W&B."""
-    settings = PROBLEMS[problem]
+    settings = PROBLEMS[problem].copy()
+    if problem == "nonlinear_regression" and method in (
+            "sgd", "pb_sav_momentum", "pb_esav_momentum"):
+        settings.update(settings["legacy_momentum"])
     config = settings.copy()
     root = Path(__file__).resolve().parent
     reference = None
@@ -51,7 +55,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         if settings.get("line_search") is not None:
             raise ValueError("The Darcy protocol requires a fixed learning rate")
     step_fn = {
-        "gd": gd.step, "sav": sav.step, "pb_sav": pb_sav.step, "pb_esav": pb_esav.step,
+        "adam": adam.step, "gd": gd.step, "sav": sav.step, "pb_sav": pb_sav.step, "pb_esav": pb_esav.step,
         "pb_naive_esav": pb_naive_esav.step,
         "esav": esav.step,
         "besav": besav.step, "pb_besav": pb_besav.step,
@@ -80,8 +84,8 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         if is_pb_momentum and mobility == "amsgrad":
             relax = settings[method]["amsgrad"]["relax"]
         else:
-            relax = settings["relax"] if method not in ("gd", "sgd", "adamw") else False
-    elif relax and method in ("gd", "sgd", "adamw"):
+            relax = settings["relax"] if method not in ("gd", "sgd", "adamw", "adam") else False
+    elif relax and method in ("gd", "sgd", "adamw", "adam"):
         raise ValueError(f"{method} does not use Relax")
     if is_besav:
         config.update(
@@ -141,6 +145,11 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         )
         if relax:
             config["relaxation_update"] = "log_r_next = min(E_next, log_r_old)"
+    elif method == "adam":
+        if problem != "nonlinear_regression":
+            raise ValueError("Adam is configured for nonlinear regression only")
+        step_fn = partial(step_fn, **settings["adam"])
+        config["optimizer_settings"] = settings["adam"].copy()
     elif method == "adamw":
         step_fn = partial(step_fn, **settings["adamw"])
         config["optimizer_settings"] = settings["adamw"].copy()
@@ -205,8 +214,18 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         lr = (settings[method]["amsgrad"]["lr"] if mobility == "amsgrad"
               else settings[method].get("lr", lr))
         line_search = None
+    controller = None
+    geometry_fn = None
+    if problem == "nonlinear_regression":
+        if method in ("sav", "pb_sav", "esav", "pb_esav"):
+            controller = settings["controller"]
+            lr = controller["initial_lr"]
+        elif method == "gd":
+            lr, line_search = settings["gd_lr"], None
+        elif method == "adam":
+            lr, line_search = settings["adam_lr"], None
     name = (method.removesuffix("_momentum") if is_pb_momentum else method)
-    if method in ("sav", "esav", "sgd", "adamw", "pb_sav", "pb_esav") or is_pb_momentum:
+    if method in ("sav", "esav", "sgd", "gd", "adam", "adamw", "pb_sav", "pb_esav") or is_pb_momentum:
         name += f"_{'nonlinear' if problem == 'nonlinear_regression' else problem}"
     name += f"_{scheme}" if scheme is not None else ""
     if linearized:
@@ -272,19 +291,33 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         x, y = data["x_train"].to(dtype), data["y_train"].to(dtype)
         order = x[:, 0].argsort()
         x, y = x[order], y[order]
-        groups = nonlinear_regression.make_groups(len(x), m, settings["partition_seed"])
+        groups = nonlinear_regression.make_groups(
+            len(x), m, settings["partition_seed"], settings.get("partition_rng", "torch"),
+        )
         model = TanhRegressor(settings)
         parameters = tuple(model.parameters())
         loss_fn = partial(
             nonlinear_regression.split_energy_loss, model, x, y, groups,
             lambda_reg=settings["lambda_reg"],
         )
+        if controller is not None:
+            if settings["lambda_reg"] != 0:
+                raise ValueError("The current curvature geometry requires lambda_reg=0")
+            geometry_fn = partial(nonlinear_regression.controller_geometry,
+                                  model, x, y, groups, method, total_shift)
+        metrics_fn = partial(nonlinear_regression.test_mse, model,
+                             data["x_test"].to(dtype), data["y_test"].to(dtype))
+        test_metric = metrics_fn
+        metrics_fn = lambda: {"test_mse": test_metric()}
+        config["input_sha256"] = hashlib.sha256(torch.cat((
+            x.flatten(), y.flatten(), *[p.detach().flatten() for p in parameters],
+        )).numpy().tobytes()).hexdigest()
         loss = "split"
-        if method not in ("sav", "esav", "sgd", "adamw"):
+        if method not in ("sav", "esav", "sgd", "gd", "adam", "adamw"):
             name += f"_m{m}"
         if is_pb_momentum:
             name += f"_momentum{momentum:g}_lr{lr:g}_alpha{alpha:g}"
-        elif method in ("sav", "esav", "sgd", "adamw", "pb_sav", "pb_esav"):
+        elif method in ("sav", "esav", "sgd", "gd", "adam", "adamw", "pb_sav", "pb_esav"):
             if method == "sgd" and config["optimizer_settings"].get("momentum", 0):
                 name += f"_momentum{config['optimizer_settings']['momentum']:g}"
             name += "_armijo" if line_search is not None else f"_lr{lr:g}"
@@ -339,6 +372,9 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             step_policy="fixed" if line_search is None else "armijo_lr_reset",
         )
 
+    if controller is not None:
+        config.update(controller=controller, step_policy="curvature_damping")
+        name = name.replace("_armijo", "_curvature_damping")
     if is_pb_momentum:
         if mobility != "identity":
             name += f"_{mobility}"
@@ -392,7 +428,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
     config.update(
         problem=problem, method=method, loss=loss, total_shift=total_shift, relax=relax,
         device=str(parameters[0].device), dtype=str(parameters[0].dtype),
-        momentum=method == "adamw" or ((method == "sgd" or is_pb_momentum) and momentum > 0),
+        momentum=method in ("adam", "adamw") or ((method == "sgd" or is_pb_momentum) and momentum > 0),
         lr=lr, torch_version=str(torch.__version__),
     )
     if method == "pb_naive_esav":
@@ -421,6 +457,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             method=method, line_search=line_search, history=history,
             naive_esav_linearized=linearized, metrics_fn=metrics_fn,
             initial_state=initial_state, on_record=recorder.record,
+            controller=controller, geometry_fn=geometry_fn,
         )
     except BaseException as error:
         status = "interrupted" if isinstance(error, (KeyboardInterrupt, SystemExit)) else "failed"
@@ -445,7 +482,7 @@ def main():
     parser.add_argument(
         "--method",
         choices=[
-            "gd", "sgd", "adamw", "sav", "esav", "naive_esav", "pb_sav",
+            "gd", "sgd", "adamw", "adam", "sav", "esav", "naive_esav", "pb_sav",
             "pb_esav", "pb_naive_esav", "besav", "pb_besav",
             "inverse_sav", "pb_inverse_sav", "mesav", "pb_mesav",
             "pb_sav_momentum", "pb_esav_momentum",

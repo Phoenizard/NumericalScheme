@@ -4,6 +4,7 @@ import math
 
 import torch
 
+from learning_rate import curvature_rate
 from optimizer import besav, esav, mesav, pb_besav, pb_esav, pb_mesav, pb_sav_momentum
 from optimizer import pb_esav_momentum
 
@@ -55,7 +56,7 @@ def _armijo_step(parameters, loss_fn, update_fn, initial_lr, settings, iteration
             raise
 
         if finite and slope <= 0 and trial_objective <= bound:
-            return trial_state, lr
+            return trial_state, lr, rejected
 
         restore_parameters()
         rejected += 1
@@ -73,9 +74,12 @@ def _armijo_step(parameters, loss_fn, update_fn, initial_lr, settings, iteration
 def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
           total_shift=None, relax=False, *, esav_scheme=None, eta=None, metrics_fn=None,
           method=None, line_search=None, history=None,
-          naive_esav_linearized=False, initial_state=None, on_record=None):
+          naive_esav_linearized=False, initial_state=None, on_record=None,
+          controller=None, geometry_fn=None):
     """Record initial/accepted states and pass a copy of each row to optional on_record."""
     is_esav = method in ("esav", "pb_esav")
+    if controller is not None and (geometry_fn is None or line_search is None):
+        raise ValueError("Curvature damping requires geometry and Armijo settings")
     is_besav = method in ("besav", "pb_besav")
     is_esav_momentum = method == "pb_esav_momentum"
     if method in ("pb_sav_momentum", "pb_esav_momentum") and line_search is not None:
@@ -94,7 +98,7 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
         if total_shift is not None:
             raise ValueError("ESAV auxiliary energies do not use total_shift")
     elif not (is_esav or is_besav or is_esav_momentum) and method not in (
-            "gd", "sgd", "adamw", "naive_esav"):
+            "gd", "sgd", "adamw", "adam", "naive_esav"):
         total_shift = 1e-10 if total_shift is None else total_shift
     is_mesav = method in ("mesav", "pb_mesav")
     has_esav_state = (
@@ -114,12 +118,14 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
     q = None
     state = initial_state
     accepted_lr = 0.0
+    backtracks = 0
     for iteration in range(steps + 1):
         with torch.no_grad():
             terms = loss_fn()
             terms = [terms] if isinstance(terms, torch.Tensor) else list(terms)
             energy = sum(terms)
-            row = {"iteration": iteration, "objective": energy.item(), "lr": accepted_lr}
+            row = {"iteration": iteration, "objective": energy.item(),
+                   "lr": accepted_lr, "backtracks": backtracks}
             if is_esav_momentum or is_esav:
                 if not torch.isfinite(energy) or energy < 0:
                     raise FloatingPointError(f"ESAV requires finite E>=0 at iteration {iteration}")
@@ -170,7 +176,7 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                     if esav_scheme == "plan2":
                         state["log_r_i"] = torch.stack(terms).detach().clone()
                 row.update(r=state["log_r"].exp().item(), r_current=energy.exp().item())
-            elif method not in ("gd", "sgd", "adamw"):
+            elif method not in ("gd", "sgd", "adamw", "adam"):
                 current = (energy + total_shift).sqrt()
                 if q is None:
                     q = current.detach().clone()
@@ -193,6 +199,9 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
         if on_record is not None:
             on_record(dict(row))
         if iteration < steps:
+            trial_lr = lr
+            if controller is not None:
+                trial_lr = curvature_rate(accepted_lr, geometry_fn(state), controller)
             accepted_lr = lr
             if line_search is not None:
                 def trial_update(trial_lr):
@@ -201,8 +210,9 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                     if method == "sgd":
                         return step_fn(parameters, loss_fn, trial_lr, state=state)
                     if is_esav or is_besav or is_mesav or method == "naive_esav":
-                        return step_fn(parameters, loss_fn, state, trial_lr, relax=relax)
-                    if method == "adamw":
+                        trial_state = {key: value.clone() for key, value in state.items()}
+                        return step_fn(parameters, loss_fn, trial_state, trial_lr, relax=relax)
+                    if method in ("adamw", "adam"):
                         return step_fn(parameters, loss_fn, state, trial_lr)
                     if esav_scheme is None:
                         return step_fn(
@@ -213,10 +223,10 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                         trial_lr, scheme=esav_scheme, relax=relax, eta=eta,
                     )
 
-                accepted_state, accepted_lr = _armijo_step(
-                    parameters, loss_fn, trial_update, lr, line_search, iteration + 1,
+                accepted_state, accepted_lr, backtracks = _armijo_step(
+                    parameters, loss_fn, trial_update, trial_lr, line_search, iteration + 1,
                 )
-                if not has_esav_state and method not in ("adamw", "sgd"):
+                if not has_esav_state and method not in ("adamw", "adam", "sgd"):
                     q = accepted_state
                 else:
                     state = accepted_state
@@ -228,7 +238,7 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                 state = step_fn(parameters, loss_fn, state, lr, relax=relax)
             elif is_esav or is_besav or is_mesav or method == "naive_esav":
                 state = step_fn(parameters, loss_fn, state, lr, relax=relax)
-            elif method == "adamw":
+            elif method in ("adamw", "adam"):
                 state = step_fn(parameters, loss_fn, state, lr)
             elif esav_scheme is None:
                 q = step_fn(parameters, loss_fn, q, lr, total_shift, relax)

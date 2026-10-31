@@ -71,6 +71,10 @@ def load_experiment(input_dir):
 def step_label(config):
     """Describe the recorded step policy without treating adaptive runs as fixed-step runs."""
     search = config.get("line_search")
+    if config.get("step_policy") == "curvature_damping":
+        controller = config["controller"]
+        return (f"curvature damping + Armijo "
+                f"[{controller['min_lr']:g}, {controller['max_lr']:g}]")
     if search is not None:
         if config.get("step_policy") == "armijo_lr_reset":
             return f"Armijo: reset lr={config['lr']:g}, halve on rejection"

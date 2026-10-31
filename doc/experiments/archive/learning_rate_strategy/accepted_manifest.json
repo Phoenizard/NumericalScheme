@@ -1,0 +1,58 @@
+{
+  "status": "user_accepted_figure3",
+  "selected_round": "r21",
+  "user_acceptance": "如果现在你展示出的第二张图是你自己画的，那我觉得完全可以。",
+  "scope": "Figure 3 visual reproduction; not exact recovery of the authors' undisclosed settings or Table 2",
+  "plot": "runs/r21/review.png",
+  "reference_plot": "figure3_reference.png",
+  "automated_review": "runs/r21/review.json",
+  "preserve_automated_failures": true,
+  "runs": {
+    "sav": {
+      "folder": "runs/r21/sav",
+      "history_sha256": "c426f09ff743749be3b4f7e3bd08f04c7f2cd3adb1f99915157fc141197d4ceb",
+      "wandb": "https://forge.coreweave.com/wandb/pheonizard-university-of-nottingham/NumericalScheme/runs/6u43qpjp",
+      "objective": 0.05921365697257935,
+      "best_test_mse": 0.10128243363119482,
+      "gradient_norm": 0.029920768448502742
+    },
+    "gd": {
+      "folder": "runs/r08/gd",
+      "history_sha256": "3822044e97be3d0296297648f8f9365d3d9f750a2e23494b3cc6d2985ec00e2a",
+      "wandb": "https://forge.coreweave.com/wandb/pheonizard-university-of-nottingham/NumericalScheme/runs/3m7qbwo3",
+      "objective": 0.030498330967106812,
+      "best_test_mse": 0.05002020316376672,
+      "gradient_norm": 0.028136992967510613
+    },
+    "pb8": {
+      "folder": "runs/r21/pb8",
+      "history_sha256": "0bb9ad19f4facb49d9bb63421910cb2cbf7c2988a56d9808fd1a9ecea9bfa69a",
+      "wandb": "https://forge.coreweave.com/wandb/pheonizard-university-of-nottingham/NumericalScheme/runs/xm0waj7f",
+      "objective": 0.00841371872573852,
+      "best_test_mse": 0.010595264679058636,
+      "gradient_norm": 0.014209402468209757
+    },
+    "pb30": {
+      "folder": "runs/r21/pb30",
+      "history_sha256": "3da179130c3e47f343a8a7dbbabbd4cc785ff591a50fe8eb53af24435f1d25bd",
+      "wandb": "https://forge.coreweave.com/wandb/pheonizard-university-of-nottingham/NumericalScheme/runs/d3bgke6x",
+      "objective": 0.002538677683417507,
+      "best_test_mse": 0.002873966394496014,
+      "gradient_norm": 1.1392769012826131e-05
+    },
+    "gn": {
+      "folder": "runs/r21/gn",
+      "history_sha256": "96a93cf44c2dba9375ae74166b18fe584e956d95d7de47cda09698fe3597ea50",
+      "wandb": "https://forge.coreweave.com/wandb/pheonizard-university-of-nottingham/NumericalScheme/runs/z6d151z0",
+      "objective": 0.0025386776778311454,
+      "best_test_mse": 0.0028743541962277354,
+      "gradient_norm": 1.1392767141000804e-05
+    }
+  },
+  "input_sha256": "163089e48357b9a8ee996fd63963dc883d1ebd931f1a3815f510f294615075fe",
+  "frozen_files_sha256": {
+    "accepted_experiment.py": "e5caa010f1de22fafb8a431b2a37fe30eb4103fbad4115c2cbd79325f785d321",
+    "accepted_config.json": "6eee1e8a5fc1d3b20ea36014768e5bd4a30a7f7c70860268e2bc27d26b60190b",
+    "accepted_figure3.png": "7e784038f6174b87d2d97ba42a0ade44b7279e6fbf62decb4e5e7b7df4b28a29"
+  }
+}

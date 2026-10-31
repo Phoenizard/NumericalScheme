@@ -17,7 +17,9 @@ from problem.config import WANDB
 ROOT = Path(__file__).resolve().parent
 def source_paths(config, root=ROOT):
     """Include runtime sources (the runner imports all optimizers), excluding data and weights."""
-    paths = [root / name for name in ("run.py", "train.py", "tracking.py", "requirements.txt")]
+    paths = [root / name for name in (
+        "run.py", "train.py", "tracking.py", "learning_rate.py", "requirements.txt",
+    )]
     for directory in ("optimizer", "problem", "network"):
         paths.extend(sorted((root / directory).glob("*.py")))
     return paths
@@ -52,6 +54,8 @@ def build_config(resolved):
     if method.startswith("pb_"):
         algorithm["pb"] = {"M": resolved["components"]}
     options = resolved.get("optimizer_settings", {})
+    if method in ("adam", "adamw"):
+        algorithm["optimizer_settings"] = options
     if options.get("momentum", 0):
         momentum = {"coefficient": options["momentum"]}
         if method.endswith("_momentum"):
@@ -75,6 +79,8 @@ def build_config(resolved):
             **resolved["line_search"],
             "reset_each_iteration": resolved["step_policy"] == "armijo_lr_reset",
         })
+    if resolved.get("step_policy") == "curvature_damping":
+        control.update(strategy="curvature_damping", controller=resolved["controller"])
     experiment = {}
     if problem == "quadratic":
         experiment.update(dimension=resolved["dimension"], initial_value=resolved["initial_value"])
@@ -94,6 +100,19 @@ def build_config(resolved):
                 "hidden_range": [resolved["hidden_init_min"], resolved["hidden_init_max"]],
                 "output_bound": resolved["output_init_bound"],
             })
+            if resolved.get("initialization") == "centered_normal":
+                network["initialization"] = {
+                    "seed": resolved["init_seed"], "kind": "centered_normal",
+                    "hidden_scale": resolved["hidden_scale"],
+                    "output_scale": resolved["hidden_width"] ** -0.5,
+                }
+            data["rng"] = resolved.get("data_rng", "torch")
+            experiment.update(
+                input_sha256=resolved.get("input_sha256"),
+                partition_seed=resolved["partition_seed"],
+                partition_rng=resolved.get("partition_rng", "torch"),
+                group_indices=resolved["group_indices"],
+            )
         elif problem == "darcy_deeponet":
             for key in ("grid_size", "n_test", "correlation_length", "permeability_values",
                         "field_threshold", "gaussian_mode", "gaussian_truncate",
@@ -130,6 +149,8 @@ def read_config(config):
                              if search else None)
     result["step_policy"] = ("armijo_lr_reset" if search and search["reset_each_iteration"]
                              else "armijo" if search else "fixed")
+    if control["strategy"] == "curvature_damping":
+        result.update(step_policy="curvature_damping", controller=control["controller"])
     auxiliary = algorithm.get("auxiliary", {})
     if "C" in auxiliary:
         result["total_shift"] = auxiliary["C"]
@@ -148,6 +169,9 @@ def read_config(config):
     initialization = network.get("initialization", {})
     if initialization:
         result["init_seed"] = initialization["seed"]
+        if initialization.get("kind") == "centered_normal":
+            result.update(initialization="centered_normal",
+                          hidden_scale=initialization["hidden_scale"])
     if "hidden_range" in initialization:
         result["hidden_init_min"], result["hidden_init_max"] = initialization["hidden_range"]
         result["output_init_bound"] = initialization["output_bound"]
@@ -159,21 +183,22 @@ def read_config(config):
         options["mobility"] = adaptive["method"] if adaptive else "identity"
         if adaptive:
             options.update(beta2=adaptive["beta2"], eps=adaptive["eps"])
-    result["optimizer_settings"] = options
+    result["optimizer_settings"] = algorithm.get("optimizer_settings", options)
     return result
 
 
 def build_tags(config):
     """Build the independent method, plugin, learning-rate and case tags."""
     method = config["method"]
-    if method in ("gd", "sgd", "adamw"):
+    if method in ("gd", "sgd", "adamw", "adam"):
         tags = ["baseline"]
     else:
         tags = [method.removesuffix("_momentum").replace("_", "-")]
     for plugin in ("momentum", "relax"):
         if plugin in config.get("algorithm", {}):
             tags.append(plugin)
-    tags.append("armijo" if config["control"]["strategy"] == "armijo" else "fix_lr")
+    tags.append({"fixed": "fix_lr", "armijo": "armijo",
+                 "curvature_damping": "curvature_damping"}[config["control"]["strategy"]])
     tags.append("nonlinear" if config["problem"] == "nonlinear_regression" else config["problem"])
     return tags
 

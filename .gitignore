@@ -95,5 +95,5 @@ Desktop.ini
 .github/instructions/
 .github/prompts/
 
-Challenge/CLAUDE/
-Challenge/OpenAI/
+# Retained research evidence after retiring the transitional workspace
+!/doc/experiments/archive/learning_rate_strategy/exploration_snapshot.tar.gz
