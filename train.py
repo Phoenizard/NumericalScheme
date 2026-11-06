@@ -78,11 +78,12 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
           controller=None, geometry_fn=None):
     """Record initial/accepted states and pass a copy of each row to optional on_record."""
     is_esav = method in ("esav", "pb_esav")
-    is_sesav = method in ("sesav", "pb_sesav")
+    is_sesav = method in ("sesav", "pb_sesav", "pb_sesav_momentum")
     if controller is not None and (geometry_fn is None or line_search is None):
         raise ValueError("Curvature damping requires geometry and Armijo settings")
     is_esav_momentum = method == "pb_esav_momentum"
-    if method in ("pb_sav_momentum", "pb_esav_momentum") and line_search is not None:
+    if method in ("pb_sav_momentum", "pb_esav_momentum", "pb_sesav_momentum") and (
+            line_search is not None):
         raise ValueError("PB momentum currently requires a fixed learning rate")
     if (is_esav or is_sesav or is_esav_momentum) and (
             esav_scheme is not None or total_shift is not None):
@@ -145,6 +146,18 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                     raise ValueError("SESAV requires an initial state with its scale k")
                 row.update(r=state["log_r"].exp().item(), r_current=(
                     state["k"] * energy / state["initial_energy"]).exp().item())
+                if method == "pb_sesav_momentum":
+                    row.update(
+                        log_r=state["log_r"].item(),
+                        auxiliary_ratio=(state["log_r"] - state["k"] * energy
+                                         / state["initial_energy"]).exp().item(),
+                        modified_energy=(state["initial_energy"] / state["k"]
+                                         * state["log_r"] + state["kinetic_energy"]).item(),
+                    )
+                    for key in ("kinetic_energy", "dissipation", "energy_law_error",
+                                "accepted_dissipation", "mobility_increase",
+                                "auxiliary_increment", "relax_log_correction"):
+                        row[key] = state[key].item()
             elif method == "pb_sav_momentum":
                 if state is None:
                     state = pb_sav_momentum.initialize(parameters, terms, total_shift)
@@ -226,7 +239,7 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                 step_fn(parameters, loss_fn, lr)
             elif method == "sgd":
                 state = step_fn(parameters, loss_fn, lr, state=state)
-            elif method in ("pb_sav_momentum", "pb_esav_momentum"):
+            elif method in ("pb_sav_momentum", "pb_esav_momentum", "pb_sesav_momentum"):
                 state = step_fn(parameters, loss_fn, state, lr, relax=relax)
             elif is_esav or is_sesav or is_mesav or method == "naive_esav":
                 state = step_fn(parameters, loss_fn, state, lr, relax=relax)

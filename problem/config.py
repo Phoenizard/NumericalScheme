@@ -46,6 +46,13 @@ PROBLEMS = {
             "reference_run": None,  # Set entity/project/run_id here or pass --reference-run.
             "amsgrad": {"lr": 3e-3, "relax": True, "beta2": 0.999, "eps": 1e-8},
         },
+        "pb_sesav_momentum": {
+            "momentum": 0.9,
+            "alpha": 0.5,
+            "reference_run": None,
+            "amsgrad": {"lr": 3e-3, "relax": True, "beta2": 0.999, "eps": 1e-8},
+        },
+        "sesav": {"k": 16.0},
         "relax": False,
         "line_search": None,
         "device": "cpu",
@@ -128,6 +135,7 @@ PROBLEMS = {
         "sgd": {"lr": 0.1, "momentum": 0.9},
         "pb_sav_momentum": {"lr": 0.1, "momentum": 0.9, "alpha": 0.5},
         "pb_esav_momentum": {"lr": 0.1, "momentum": 0.9, "alpha": 0.5},
+        "pb_sesav_momentum": {"lr": 0.1, "momentum": 0.9, "alpha": 0.5},
         # SESAV：r = exp(k E/E0)
         "sesav": {"k": 16.0},
         # 计算

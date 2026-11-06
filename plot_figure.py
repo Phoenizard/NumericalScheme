@@ -565,7 +565,7 @@ def plot_darcy_curves(experiments, output):
     reference = experiments[0][0]
     for config, _ in experiments:
         if config["problem"] != "darcy_deeponet" or config["method"] not in (
-                "sgd", "pb_sav_momentum", "pb_esav_momentum"):
+                "sgd", "pb_sav_momentum", "pb_esav_momentum", "pb_sesav_momentum"):
             raise ValueError("Darcy plots require SGD or PB momentum records")
         if any(config.get(key) != reference.get(key) for key in (
                 "data_config", "init_seed", "device", "dtype", "dimension", "lambda_reg",
@@ -575,8 +575,8 @@ def plot_darcy_curves(experiments, output):
     fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), layout="constrained")
     for config, rows in experiments:
         momentum = config["optimizer_settings"]["momentum"]
-        if config["method"] in ("pb_sav_momentum", "pb_esav_momentum"):
-            method_label = "PB-ESAV" if config["method"] == "pb_esav_momentum" else "PB-SAV"
+        if config["method"] in ("pb_sav_momentum", "pb_esav_momentum", "pb_sesav_momentum"):
+            method_label = config["method"].removesuffix("_momentum").replace("_", "-").upper()
             label = f"{method_label} + momentum ({momentum:g})"
             if config["optimizer_settings"].get("mobility") == "amsgrad":
                 label += " + adaptive"

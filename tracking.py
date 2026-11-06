@@ -70,11 +70,16 @@ def build_config(resolved):
                     "eps": options["eps"],
                 }
         algorithm["momentum"] = momentum
+    if method == "pb_sesav_momentum":
+        algorithm["pb"]["definition"] = resolved["B_definition"]
+        algorithm["modified_energy"] = resolved["modified_energy"]
     if resolved.get("relax"):
         algorithm["relax"] = {"enabled": True}
         for source, key in (("relaxation_rho", "rho"), ("eta", "eta")):
             if source in resolved:
                 algorithm["relax"][key] = resolved[source]
+        if method == "pb_sesav_momentum":
+            algorithm["relax"]["update"] = resolved["relaxation_update"]
     control = {"lr": resolved["lr"], "strategy": "fixed"}
     if resolved.get("line_search") is not None:
         control.update(strategy="armijo", armijo={
@@ -154,6 +159,8 @@ def read_config(config):
     if control["strategy"] == "curvature_damping":
         result.update(step_policy="curvature_damping", controller=control["controller"])
     auxiliary = algorithm.get("auxiliary", {})
+    if "k" in auxiliary:
+        result["sesav_k"] = auxiliary["k"]
     if "C" in auxiliary:
         result["total_shift"] = auxiliary["C"]
     for key in ("scheme", "linearized"):
