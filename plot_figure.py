@@ -26,6 +26,10 @@ ESAV_STYLES = {
     "pb_esav": ("PB-ESAV", "#218c60", "-", "s"),
     "relax_esav": ("Relax-ESAV", "#b3448c", "--", "D"),
     "relax_pb_esav": ("Relax-PB-ESAV", "#663b94", "--", "s"),
+    "sesav": ("SESAV", "#d55e00", "-", "D"),
+    "pb_sesav": ("PB-SESAV", "#d55e00", "-", "s"),
+    "relax_sesav": ("Relax-SESAV", "#cc3311", "--", "D"),
+    "relax_pb_sesav": ("Relax-PB-SESAV", "#cc3311", "--", "s"),
 }
 
 MESAV_STYLES = {
@@ -33,13 +37,6 @@ MESAV_STYLES = {
     "pb_mesav": ("PB-MESAV", "#1765ad", "-", "s"),
     "relax_mesav": ("Relax-MESAV", "#9b6cc2", "--", "o"),
     "relax_pb_mesav": ("Relax-PB-MESAV", "#663b94", "--", "s"),
-}
-
-BESAV_STYLES = {
-    "besav": ("BESAV", "#006d9c", "-", "D"),
-    "pb_besav": ("PB-BESAV", "#006d9c", "-", "s"),
-    "relax_besav": ("Relax-BESAV", "#ad477b", "--", "D"),
-    "relax_pb_besav": ("Relax-PB-BESAV", "#ad477b", "--", "s"),
 }
 
 
@@ -51,20 +48,10 @@ def load_experiment(input_dir):
         rows = list(csv.DictReader(file))
     if not rows:
         raise ValueError("The experiment history is empty")
-    # Interpret archived names and diagnostic columns without rewriting raw files.
-    aliases = {
-        "bounded_exp": "besav", "pb_bounded_exp": "pb_besav",
-        "relax_pb_bounded_exp": "relax_pb_besav",
-    }
-    config["method"] = aliases.get(config["method"], config["method"])
     if config.get("relax") and config["method"] in (
-        "esav", "pb_esav", "besav", "pb_besav", "mesav", "pb_mesav",
+        "esav", "pb_esav", "sesav", "pb_sesav", "mesav", "pb_mesav",
     ):
         config["method"] = "relax_" + config["method"]
-    if config["method"] in BESAV_STYLES:
-        for row in rows:
-            if "r_over_exp_auxiliary_energy" not in row and "auxiliary_ratio" in row:
-                row["r_over_exp_auxiliary_energy"] = row["auxiliary_ratio"]
     return config, rows
 
 
@@ -253,9 +240,7 @@ def plot_experiment(input_dir, output):
     modified_key = "r" if config.get("linearized") else "modified_energy"
     modified = [float(row[modified_key]) for row in rows]
     method = config["method"]
-    if method in BESAV_STYLES:
-        label, modified_label = BESAV_STYLES[method][0], r"$\log r^n$"
-    elif method in MESAV_STYLES:
+    if method in MESAV_STYLES:
         label, modified_label = MESAV_STYLES[method][0], r"$\log r^n$"
     elif method in ESAV_STYLES:
         label, modified_label = esav_label(config), r"$4E^0\log r^n$"
@@ -266,9 +251,6 @@ def plot_experiment(input_dir, output):
             if config["scheme"] == "plan1":
                 label += f", eta = {config.get('eta', 1.0):g}"
         modified_label = r"$r^n$" if config.get("linearized") else r"$\log r^n$"
-    elif method in ("inverse_sav", "pb_inverse_sav"):
-        label = "Inverse SAV" if method == "inverse_sav" else "PB-Inverse SAV"
-        modified_label = r"$1/r^n$"
     elif method in ("sav", "pb_sav"):
         label = "SAV" if method == "sav" else "PB-SAV"
         if config.get("relax", False):
@@ -315,7 +297,6 @@ def plot_comparison(input_dirs, output):
     has_auxiliary = any(
         any(key in rows[0] for key in (
             "r_over_exp_E", "r_over_exp_auxiliary_energy", "q_over_Q",
-            "r_times_E_plus_C",
         )) for _, rows in experiments
     )
     fig, axes = plt.subplots(1, 2 if has_auxiliary else 1, figsize=(14, 6.2),
@@ -325,9 +306,7 @@ def plot_comparison(input_dirs, output):
     has_sav = False
     has_esav = False
     has_new_esav = False
-    has_besav = False
     has_mesav = False
-    has_inverse = False
     signed_ratio = False
     ratio_min = float("inf")
     ratio_max = 0.0
@@ -346,17 +325,6 @@ def plot_comparison(input_dirs, output):
             marker_start = 10 if method != "adamw" else 30
             linewidth = 2.4 if method != "adamw" else 1.6
             ratio_key = None
-        elif method in ("inverse_sav", "pb_inverse_sav"):
-            label = "Inverse SAV" if method == "inverse_sav" else "PB-Inverse SAV"
-            color = "#8b3fb0" if method == "inverse_sav" else "#009e73"
-            style, marker = "-", "v" if method == "inverse_sav" else "D"
-            ratio_key = "r_times_E_plus_C"
-            shifts.add(config["total_shift"])
-            has_inverse = True
-        elif method in BESAV_STYLES:
-            label, color, style, marker = BESAV_STYLES[method]
-            ratio_key = "r_over_exp_auxiliary_energy"
-            has_besav = True
         elif method in MESAV_STYLES:
             label, color, style, marker = MESAV_STYLES[method]
             ratio_key = "r_over_exp_auxiliary_energy"
@@ -448,16 +416,10 @@ def plot_comparison(input_dirs, output):
         ratio_label += ("\n" if ratio_label else "") + (
             r"$r^n/\exp(E(x^n)/(4E^0))$ (ESAV/PB)"
         )
-    if has_besav:
-        ratio_label += ("\n" if ratio_label else "") + (
-            r"$r^n/\exp(E(x^n)/(E(x^n)+E^0))$ (BESAV/PB)"
-        )
     if has_mesav:
         ratio_label += ("\n" if ratio_label else "") + (
             r"$r^n/[\exp(E(x^n)/(E(x^0)+C))\sqrt{E(x^n)+C}]$ (MESAV/PB)"
         )
-    if has_inverse:
-        ratio_label += ("\n" if ratio_label else "") + r"$r^n[E(x^n)+C]$ (Inverse SAV/PB)"
     if has_auxiliary:
         axes[1].set(title="Auxiliary-variable ratio", ylabel=ratio_label)
         if signed_ratio:
@@ -529,11 +491,9 @@ def plot_modified_energy(input_dirs, output):
                              layout="constrained", squeeze=False)
     for axis, (lr, group) in zip(axes[0], groups.items()):
         order = {"gd": 0, "sgd": 0, "adamw": 1, "sav": 2, "pb_sav": 3,
-                 "esav": 4, "naive_esav": 5, "pb_naive_esav": 6, "pb_esav": 7,
-                 "inverse_sav": 8, "pb_inverse_sav": 9}
+                 "esav": 4, "naive_esav": 5, "pb_naive_esav": 6, "pb_esav": 7}
         order.update({method: 10 + index for index, method in enumerate(MESAV_STYLES)})
         order.update({method: 4 + index for index, method in enumerate(ESAV_STYLES)})
-        order.update({method: 14 + index for index, method in enumerate(BESAV_STYLES)})
         group.sort(key=lambda item: order[item[0]["method"]])
         for config, rows in group:
             method = config["method"]
@@ -546,19 +506,10 @@ def plot_modified_energy(input_dirs, output):
                 )
                 style = "-"
                 energy_key = "objective"
-            elif method in ("inverse_sav", "pb_inverse_sav"):
-                label = "Inverse SAV" if method == "inverse_sav" else "PB-Inverse SAV"
-                label += r": $1/r^n$"
-                color = "#8b3fb0" if method == "inverse_sav" else "#009e73"
-                style, marker, start = "-", "D", 5
             elif method in ("sav", "pb_sav"):
                 label = "SAV" if method == "sav" else "PB-SAV"
                 label += r": $(q^n)^2$"
                 color, style, marker, start = "#0072b2", "--", "s", 15
-            elif method in BESAV_STYLES:
-                label, color, style, marker = BESAV_STYLES[method]
-                label += r": $\ln r^n$"
-                start = 0
             elif method in MESAV_STYLES:
                 label, color, style, marker = MESAV_STYLES[method]
                 label += r": $\ln r^n$"
@@ -614,7 +565,7 @@ def plot_darcy_curves(experiments, output):
     reference = experiments[0][0]
     for config, _ in experiments:
         if config["problem"] != "darcy_deeponet" or config["method"] not in (
-                "sgd", "pb_sav_momentum", "pb_esav_momentum"):
+                "sgd", "pb_sav_momentum", "pb_esav_momentum", "pb_sesav_momentum"):
             raise ValueError("Darcy plots require SGD or PB momentum records")
         if any(config.get(key) != reference.get(key) for key in (
                 "data_config", "init_seed", "device", "dtype", "dimension", "lambda_reg",
@@ -624,8 +575,8 @@ def plot_darcy_curves(experiments, output):
     fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), layout="constrained")
     for config, rows in experiments:
         momentum = config["optimizer_settings"]["momentum"]
-        if config["method"] in ("pb_sav_momentum", "pb_esav_momentum"):
-            method_label = "PB-ESAV" if config["method"] == "pb_esav_momentum" else "PB-SAV"
+        if config["method"] in ("pb_sav_momentum", "pb_esav_momentum", "pb_sesav_momentum"):
+            method_label = config["method"].removesuffix("_momentum").replace("_", "-").upper()
             label = f"{method_label} + momentum ({momentum:g})"
             if config["optimizer_settings"].get("mobility") == "amsgrad":
                 label += " + adaptive"
@@ -666,8 +617,6 @@ def plot_training_curves(input_dirs, output):
         ("gd", None): ("GD", "#333333", "-.", None),
         ("sgd", None): ("SGD", "#333333", "-.", None),
         ("adamw", None): ("AdamW", "#007c91", "-", None),
-        ("inverse_sav", None): ("Inverse SAV", "#8b3fb0", "-", "v"),
-        ("pb_inverse_sav", None): ("PB-Inverse SAV", "#009e73", "-", "D"),
         ("naive_esav", None): ("naiveESAV", "#d89b00", "-", None),
         ("pb_sav", None): ("PB-SAV", "#3568a8", "-", None),
         ("pb_naive_esav", "plan1"): ("PB-naiveESAV Plan 1", "#8953b1", "--", None),
@@ -675,7 +624,6 @@ def plot_training_curves(input_dirs, output):
     }
     styles.update({(method, None): values for method, values in MESAV_STYLES.items()})
     styles.update({(method, None): values for method, values in ESAV_STYLES.items()})
-    styles.update({(method, None): values for method, values in BESAV_STYLES.items()})
     keys = ("objective", "test_mse") if all(
         "test_mse" in rows[0] for _, rows in experiments
     ) else ("objective",)
@@ -722,7 +670,7 @@ def plot_training_curves(input_dirs, output):
 
 ROOT = Path(__file__).resolve().parent
 PROJECT = f"{WANDB['entity']}/{WANDB['project']}"
-GROUPS = ROOT / "doc/experiments/esav_plot_groups.json"
+GROUPS = ROOT / "results/esav_plot_groups.json"
 CACHE = ROOT / "TMP/wandb_exports"
 
 

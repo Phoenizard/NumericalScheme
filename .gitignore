@@ -47,6 +47,7 @@ Desktop.ini
 !/data/README.md
 !/data/.gitkeep
 /results/*
+/results/
 !/results/README.md
 !/results/.gitkeep
 
@@ -96,4 +97,6 @@ Desktop.ini
 .github/prompts/
 
 # Retained research evidence after retiring the transitional workspace
-!/doc/experiments/archive/learning_rate_strategy/exploration_snapshot.tar.gz
+!/results/esav_plot_groups.json
+!/results/learning_rate_strategy/
+!/results/learning_rate_strategy/exploration_snapshot.tar.gz

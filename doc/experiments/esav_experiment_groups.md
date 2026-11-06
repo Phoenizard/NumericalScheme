@@ -93,7 +93,7 @@ $M=2$，$K=300$；Armijo。与 A1 的基础方法比较 PB 的作用，复用 A1
 | [PB-SAV](https://forge.coreweave.com/wandb/pheonizard-university-of-nottingham/NumericalScheme/runs/d3b4d07c7275) | 开 | $1.124140\times10^{-16}$ |
 | [PB-ESAV](https://forge.coreweave.com/wandb/pheonizard-university-of-nottingham/NumericalScheme/runs/bfee6830c639) | 开 | $4.736856\times10^{-39}$ |
 
-判断：PB-ESAV 的最终目标约为 $10^{-39}$；在本组开、关 Relax 的两对比较中均低于对应 PB-SAV。
+判断：PB-ESAV 的最终目标约为 $10^{-39}$；在本组开、关 Relax 的两对比较中均低于对应 PB-SAV。该数值是以零为最小点的平方和目标值，对应的最终解误差分别约为 $8.99\times10^{-19}$、$6.68\times10^{-19}$；精度含义见[实验报告 B1](esav_experiments.md#b1-pb-与-relax-的组合)。
 
 ## C 非线性基础方法
 
@@ -271,7 +271,7 @@ $$
 | Relax 后仍全面优于 SAV | 不成立：二次型基础组、D2–D5、E1–E4 出现相反排序 |
 | ESAV 与动量结构可以组合 | E1–E5 均完成 600 步并降低目标；独立动量收益尚缺同条件无动量对照 |
 | 跨随机种子的稳定结论 | 非线性目前只有一套数据、初始化和分组种子 |
-| BESAV、naiveESAV、MESAV、Darcy | 当前 W&B 清单中均为 0 次；不将 example.md 的历史链接计入本次在线实验 |
+| naiveESAV、MESAV、Darcy | 当前 W&B 清单中均为 0 次；不将 example.md 的历史链接计入本次在线实验 |
 
 ## 原始记录
 

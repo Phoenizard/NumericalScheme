@@ -46,6 +46,13 @@ PROBLEMS = {
             "reference_run": None,  # Set entity/project/run_id here or pass --reference-run.
             "amsgrad": {"lr": 3e-3, "relax": True, "beta2": 0.999, "eps": 1e-8},
         },
+        "pb_sesav_momentum": {
+            "momentum": 0.9,
+            "alpha": 0.5,
+            "reference_run": None,
+            "amsgrad": {"lr": 3e-3, "relax": True, "beta2": 0.999, "eps": 1e-8},
+        },
+        "sesav": {"k": 16.0},
         "relax": False,
         "line_search": None,
         "device": "cpu",
@@ -71,7 +78,7 @@ PROBLEMS = {
         # SAV 系列的总 shift；ESAV / PB-ESAV 使用冻结初始能量，不使用 shift
         "total_shift": 1e-10,
         "adamw": {"betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0},
-        "reference_baseline_lr": 0.1,  # Fixed-rate SGD/AdamW reference in inverse-SAV research.
+        "reference_baseline_lr": 0.1,  # Fixed-rate SGD/AdamW reference.
         # 计算
         "device": "cpu",
         "dtype": "float64",
@@ -128,9 +135,24 @@ PROBLEMS = {
         "sgd": {"lr": 0.1, "momentum": 0.9},
         "pb_sav_momentum": {"lr": 0.1, "momentum": 0.9, "alpha": 0.5},
         "pb_esav_momentum": {"lr": 0.1, "momentum": 0.9, "alpha": 0.5},
+        "pb_sesav_momentum": {"lr": 0.1, "momentum": 0.9, "alpha": 0.5},
+        # SESAV：r = exp(k E/E0)
+        "sesav": {"k": 16.0},
         # 计算
         "device": "cpu",
         "dtype": "float64",
         "num_threads": 4,
     },
+}
+
+# 二次型固定学习率平台（SESAV 实验）：固定 0.9、3000 步、无线搜索；辅助变量方法开 Relax。
+PROBLEMS["quadratic_fixed_lr"] = {
+    **PROBLEMS["quadratic"],
+    "lr": 0.9,
+    "steps": 3000,
+    "relax": True,
+    "line_search": None,
+    "reference_baseline_lr": 0.1,  # Fixed-rate AdamW / Adam reference.
+    "adam": {"betas": (0.9, 0.999), "eps": 1e-8},
+    "sesav": {"k": 16.0},
 }

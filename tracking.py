@@ -32,15 +32,17 @@ def build_config(resolved):
     base = method.removeprefix("pb_").removesuffix("_momentum")
     expressions = {
         "sav": "sqrt(E+C)", "esav": "exp(E/(4*E_0))",
-        "besav": "exp(E/(E+E_0))", "mesav": "exp(E/(E_0+C))*sqrt(E+C)",
-        "naive_esav": "exp(E)", "inverse_sav": "1/(E+C)",
+        "mesav": "exp(E/(E_0+C))*sqrt(E+C)", "naive_esav": "exp(E)",
+        "sesav": "exp(k*E/E_0)",
     }
     algorithm = {}
     if base in expressions:
         auxiliary = {"expression": expressions[base]}
-        if base in ("sav", "mesav", "inverse_sav"):
+        if base in ("sav", "mesav"):
             auxiliary["C"] = resolved["total_shift"]
-        if base in ("esav", "besav", "mesav"):
+        if base == "sesav":
+            auxiliary["k"] = resolved["sesav_k"]
+        if base in ("esav", "mesav", "sesav"):
             auxiliary["E_0"] = resolved.get("initial_energy", resolved.get("reference_energy"))
             components = resolved.get("initial_components", resolved.get("reference_components"))
             if method.startswith("pb_") and components is not None:
@@ -68,11 +70,16 @@ def build_config(resolved):
                     "eps": options["eps"],
                 }
         algorithm["momentum"] = momentum
+    if method == "pb_sesav_momentum":
+        algorithm["pb"]["definition"] = resolved["B_definition"]
+        algorithm["modified_energy"] = resolved["modified_energy"]
     if resolved.get("relax"):
         algorithm["relax"] = {"enabled": True}
         for source, key in (("relaxation_rho", "rho"), ("eta", "eta")):
             if source in resolved:
                 algorithm["relax"][key] = resolved[source]
+        if method == "pb_sesav_momentum":
+            algorithm["relax"]["update"] = resolved["relaxation_update"]
     control = {"lr": resolved["lr"], "strategy": "fixed"}
     if resolved.get("line_search") is not None:
         control.update(strategy="armijo", armijo={
@@ -82,7 +89,7 @@ def build_config(resolved):
     if resolved.get("step_policy") == "curvature_damping":
         control.update(strategy="curvature_damping", controller=resolved["controller"])
     experiment = {}
-    if problem == "quadratic":
+    if problem.startswith("quadratic"):
         experiment.update(dimension=resolved["dimension"], initial_value=resolved["initial_value"])
     else:
         data_path = Path(resolved["data_path"])
@@ -152,6 +159,8 @@ def read_config(config):
     if control["strategy"] == "curvature_damping":
         result.update(step_policy="curvature_damping", controller=control["controller"])
     auxiliary = algorithm.get("auxiliary", {})
+    if "k" in auxiliary:
+        result["sesav_k"] = auxiliary["k"]
     if "C" in auxiliary:
         result["total_shift"] = auxiliary["C"]
     for key in ("scheme", "linearized"):
