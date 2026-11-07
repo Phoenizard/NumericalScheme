@@ -19,7 +19,8 @@ from tracking import _sdk, read_config
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.ticker import LogFormatterMathtext, LogLocator, MaxNLocator, NullLocator
+from matplotlib.ticker import (LogFormatterMathtext, LogLocator, MaxNLocator, NullFormatter,
+                              NullLocator, PercentFormatter)
 
 ESAV_STYLES = {
     "esav": ("ESAV", "#009e73", "-", "D"),
@@ -233,7 +234,8 @@ def plot_experiment(input_dir, output):
     config, rows = load_experiment(input_dir)
     if "r_current" in rows[0]:
         return plot_recorded_results([(config, rows)], output, auxiliary=True)
-    if config["problem"] == "darcy_deeponet" or config["method"] in ("gd", "sgd", "adamw"):
+    if (config["problem"] in ("darcy_deeponet", "darcy_deeponet_v2")
+            or config["method"] in ("gd", "sgd", "adamw")):
         return plot_comparison([input_dir], output)
     iterations = [int(row["iteration"]) for row in rows]
     objectives = [float(row["objective"]) for row in rows]
@@ -560,6 +562,78 @@ def plot_modified_energy(input_dirs, output):
     return output
 
 
+def plot_darcy_report(input_dirs, output):
+    """Plot the archived Darcy v2 training and validation series at their recorded steps."""
+    styles = {
+        "pb_sav_momentum": ("PB-SAV", "#cb4952", "-"),
+        "pb_sesav_momentum": ("PB-SESAV", "#7044a3", "-"),
+        "sgd": ("SGD", "#586676", "--"),
+        "adam": ("Adam", "#0c846b", "-."),
+    }
+    runs = {}
+    shared = None
+    for folder in input_dirs:
+        config, history = load_experiment(folder)
+        method = config["method"]
+        if (config["problem"] not in ("darcy_deeponet", "darcy_deeponet_v2")
+                or method not in styles or method in runs):
+            raise ValueError(f"Unexpected or duplicate Darcy record: {folder}")
+        if config["problem"] == "darcy_deeponet_v2":
+            validation = [r for r in history if r.get("validation_relative_l2") not in ("", None)]
+            digest, settings = config["data_sha256"], config
+        else:
+            with (folder / "evaluations.csv").open(newline="", encoding="utf-8") as stream:
+                validation = list(csv.DictReader(stream))
+            digest, settings = config["data"]["sha256"], config["settings"]
+        setup = (digest, config["initial_parameters_sha256"], config["init_seed"],
+                 config["normalization"], settings["steps"], settings["lambda_reg"],
+                 settings["validation_every"])
+        if shared is not None and setup != shared:
+            raise ValueError("The Darcy comparison requires matching data, initial state and settings")
+        shared = setup
+        runs[method] = config, history, validation
+    if set(runs) != set(styles):
+        raise ValueError("The Darcy report requires PB-SAV, PB-SESAV, SGD and Adam")
+
+    output.mkdir(parents=True, exist_ok=True)
+    for key, ylabel in (("objective", r"Training objective $E$"),
+                        ("validation_relative_l2", r"Validation relative $L^2$ error (%)")):
+        training = key == "objective"
+        fig, ax = plt.subplots(figsize=(8, 4.3), layout="constrained")
+        zoom = ax.inset_axes([0.56, 0.49, 0.41, 0.40])
+        for method, (name, color, style) in styles.items():
+            config, history, validation = runs[method]
+            rows = history if training else validation
+            steps = [int(row["iteration"]) for row in rows]
+            values = [float(row[key]) * (1 if training else 100) for row in rows]
+            if method == "pb_sesav_momentum":
+                name += f" ($K={config['sesav_k']:g}$)"
+            label = f"{name}   $\\eta={config['lr']:g}$"
+            line = dict(color=color, linestyle=style, linewidth=1.2)
+            ax.plot(steps, values, label=label, marker=None if training else ".",
+                    markersize=3, **line)
+            count = min(201 if training else 11, len(rows))
+            zoom.plot(steps[-count:], values[-count:], marker=None if training else ".",
+                      markersize=3, **line)
+        ax.set_title("Darcy DeepONet", loc="left", fontweight="bold")
+        ax.set_title(f"seed {config['init_seed']}", loc="right", fontsize=10)
+        ax.set(xlabel="Training step", ylabel=ylabel, xlim=(0, steps[-1]), yscale="log")
+        zoom.set_title(f"Steps {steps[-count]}–{steps[-1]}", fontsize=9)
+        zoom.set_xticks([steps[-count], (steps[-count] + steps[-1]) // 2, steps[-1]])
+        zoom.yaxis.set_major_locator(MaxNLocator(nbins=3))
+        zoom.tick_params(labelsize=8)
+        ax.grid(axis="y", which="both", alpha=0.17)
+        ax.spines[["right", "top"]].set_visible(False)
+        if not training:
+            ax.set_yticks([10, 20, 50, 100])
+            ax.yaxis.set_major_formatter(PercentFormatter(xmax=100, decimals=0))
+            ax.yaxis.set_minor_formatter(NullFormatter())
+            zoom.yaxis.set_major_formatter(PercentFormatter(xmax=100, decimals=0))
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=2, frameon=False)
+        fig.savefig(output / f"{key}.png", dpi=200, facecolor="white")
+        plt.close(fig)
+
+
 def plot_darcy_curves(experiments, output):
     """Plot saved Darcy data losses and mean test relative L2, without rerunning models."""
     reference = experiments[0][0]
@@ -703,7 +777,15 @@ def validate_records(directory):
         rows = list(reader)
     if not rows:
         raise ValueError(f"{directory}: empty history")
+    planned = config["experiment"]["steps"]
+    interval = config["experiment"].get("validation_every")
     for index, row in enumerate(rows):
+        if interval:
+            if index % interval == 0 or index == planned:
+                if not row.get("validation_relative_l2"):
+                    raise ValueError(f"{directory}: missing validation error at {index}")
+            elif row.get("validation_relative_l2") == "":
+                del row["validation_relative_l2"]
         for key, text in row.items():
             try:
                 value = float(text)
@@ -716,7 +798,6 @@ def validate_records(directory):
     status = summary.get("status")
     if status not in ("completed", "failed", "interrupted"):
         raise ValueError(f"{directory}: unknown status {status!r}")
-    planned = config["experiment"]["steps"]
     actual = len(rows) - 1
     if actual > planned or (status == "completed" and actual != planned):
         raise ValueError(f"{directory}: {status}, recorded {actual}/{planned} updates")
@@ -903,6 +984,8 @@ def main():
     parser.add_argument("--labels", nargs="+", help="W&B CSV legend labels in column order")
     parser.add_argument("--title", help="W&B CSV figure title")
     mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--darcy-report", action="store_true",
+                      help="Plot training E and validation relative L2 from Darcy v2 run directories")
     mode.add_argument("--wandb-csv", action="store_true",
                       help="Plot objective columns from one exported W&B chart CSV")
     mode.add_argument("--training", action="store_true",
@@ -917,7 +1000,8 @@ def main():
     parser.add_argument("--offline", action="store_true", help="Use cached W&B records")
     args = parser.parse_args()
     if args.group or args.all:
-        if args.input or args.wandb_csv or args.training or args.modified_energy or args.labels or args.title:
+        if (args.input or args.wandb_csv or args.darcy_report or args.training
+                or args.modified_energy or args.labels or args.title):
             parser.error("Group export cannot be combined with local plotting options")
         args.output = args.output or ROOT / "TMP/experiment_exports"
         export_selected_groups(args, parser)
@@ -926,7 +1010,9 @@ def main():
         parser.error("Local plotting requires --input and --output")
     if (args.labels is not None or args.title is not None) and not args.wandb_csv:
         parser.error("--labels and --title require --wandb-csv")
-    if args.wandb_csv:
+    if args.darcy_report:
+        plot_darcy_report(args.input, args.output)
+    elif args.wandb_csv:
         if len(args.input) != 1:
             parser.error("--wandb-csv requires exactly one CSV file")
         plot_wandb_csv(args.input[0], args.output, labels=args.labels, title=args.title)

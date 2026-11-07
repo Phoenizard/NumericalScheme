@@ -31,12 +31,14 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
     reference = None
     data_path = None
     initial_state = None
+    darcy_v2 = problem == "darcy_deeponet_v2"
+    is_darcy = darcy_v2 or problem == "darcy_deeponet"
     is_pb_momentum = method in ("pb_sav_momentum", "pb_esav_momentum", "pb_sesav_momentum")
     if reference_run is not None and (not is_pb_momentum or problem != "darcy_deeponet"):
         raise ValueError("--reference-run is only used by Darcy PB momentum comparisons")
     if mobility is not None and not is_pb_momentum:
         raise ValueError("--mobility is only supported by PB momentum methods")
-    mobility = mobility or "identity"
+    mobility = mobility or (settings.get("default_mobility", "identity") if is_pb_momentum else "identity")
     if mobility not in ("identity", "amsgrad"):
         raise ValueError("Momentum mobility must be identity or amsgrad")
     if is_pb_momentum and method not in settings:
@@ -45,9 +47,10 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         raise ValueError(f"AMSGrad mobility is not configured for {problem}")
     if "num_threads" in settings:
         torch.set_num_threads(settings["num_threads"])
-    if problem == "darcy_deeponet":
-        if method not in ("sgd", "pb_sav_momentum", "pb_esav_momentum", "pb_sesav_momentum"):
-            raise ValueError("Darcy supports SGD or PB momentum methods")
+    if is_darcy:
+        baselines = ("sgd", "adam") if darcy_v2 else ("sgd", "pb_esav_momentum")
+        if method not in ("pb_sav_momentum", "pb_sesav_momentum", *baselines):
+            raise ValueError(f"{method} is not configured for {problem}")
         if m is not None or loss is not None:
             raise ValueError("Darcy uses its fixed data + L2 objective; omit --m and --loss")
         if settings["device"] != "cpu" or settings["dtype"] != "float64":
@@ -242,12 +245,12 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         name += "_linearized"
 
     metrics_fn = None
-    if problem == "darcy_deeponet":
+    if is_darcy:
         from network.darcy_deeponet import DeepONet
         from problem import darcy_deeponet
 
         data_path = root / settings["data_path"]
-        if is_pb_momentum:
+        if is_pb_momentum and not darcy_v2:
             reference_run = reference_run or settings[method]["reference_run"]
             reference = load_reference_run(reference_run)
             shared = ("grid_size", "n_train", "n_test", "correlation_length",
@@ -264,13 +267,15 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
         data = darcy_deeponet.load_data({**settings, "data_path": str(data_path)})
         model = DeepONet(settings)
         parameters = tuple(model.parameters())
+        target = data["u_train"] / data["scale"] if darcy_v2 else data["u_train"]
         loss_fn = partial(
             darcy_deeponet.split_energy_loss, model, data["a_train"], data["coordinates"],
-            data["u_train"], settings["lambda_reg"],
+            target, settings["lambda_reg"],
         )
-        metrics_fn = partial(darcy_deeponet.metrics, model, data, settings["lambda_reg"])
         loss = "data_plus_l2"
-        name += f"_momentum{momentum:g}_seed{settings['init_seed']}"
+        if method != "adam":
+            name += f"_momentum{momentum:g}"
+        name += f"_seed{settings['init_seed']}"
         config.update(
             model="darcy_deeponet", data=str(data_path.resolve()), data_config=data["config"],
             data_versions=data["versions"], batch_size=len(data["a_train"]), components=2,
@@ -285,6 +290,15 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             timing_scope="loop_and_metrics_excluding_synchronous_recording",
             reproduction_status="declared_defaults_not_exact_author_replication",
         )
+        if darcy_v2:
+            metrics_fn = partial(darcy_deeponet.validation_metrics, model, data)
+            config.pop("test_metric")
+            config.update(data_sha256=data["sha256"], training_rms=data["scale"].item(),
+                          normalization=data["config"]["normalization"],
+                          initial_parameters_sha256=darcy_deeponet.tensor_hash(model.state_dict()),
+                          objective_normalization="mean((prediction-u_train/scale)^2)/2 + lambda*||theta||^2/2")
+        else:
+            metrics_fn = partial(darcy_deeponet.metrics, model, data, settings["lambda_reg"])
     elif problem == "nonlinear_regression":
         if loss is not None:
             raise ValueError("--loss is only used by quadratic")
@@ -474,6 +488,7 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
             total_shift=total_shift, relax=relax, esav_scheme=scheme,
             method=method, line_search=line_search, history=history,
             naive_esav_linearized=linearized, metrics_fn=metrics_fn,
+            metrics_every=settings.get("validation_every", 1),
             initial_state=initial_state, on_record=recorder.record,
             controller=controller, geometry_fn=geometry_fn,
         )
@@ -490,6 +505,8 @@ def run_experiment(problem="quadratic", method="pb_sav", scheme=None,
     if problem == "darcy_deeponet":
         print(f"  Data loss = {history[-1]['data_loss']:.8e}; "
               f"test relative L2 = {history[-1]['test_relative_l2']:.8e}")
+    elif darcy_v2:
+        print(f"  Validation relative L2 = {history[-1]['validation_relative_l2']:.8e}")
     print(f"  W&B: {recorder.run.url}")
     return history
 

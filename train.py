@@ -75,7 +75,7 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
           total_shift=None, relax=False, *, esav_scheme=None, eta=None, metrics_fn=None,
           method=None, line_search=None, history=None,
           naive_esav_linearized=False, initial_state=None, on_record=None,
-          controller=None, geometry_fn=None):
+          controller=None, geometry_fn=None, metrics_every=1):
     """Record initial/accepted states and pass a copy of each row to optional on_record."""
     is_esav = method in ("esav", "pb_esav")
     is_sesav = method in ("sesav", "pb_sesav", "pb_sesav_momentum")
@@ -194,7 +194,7 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
             if len(terms) > 1:
                 for i, value in enumerate(terms, start=1):
                     row[f"energy_{i}"] = value.item()
-            if metrics_fn is not None:
+            if metrics_fn is not None and (iteration % metrics_every == 0 or iteration == steps):
                 row.update(metrics_fn())
         if not all(math.isfinite(value) for value in row.values()):
             if on_record is not None:

@@ -156,3 +156,17 @@ PROBLEMS["quadratic_fixed_lr"] = {
     "adam": {"betas": (0.9, 0.999), "eps": 1e-8},
     "sesav": {"k": 16.0},
 }
+
+# Darcy v2 与报告共用三组独立样本、训练集 RMS 和 seed 0 初值。
+# 首次生成数据：python -B -m problem.darcy_deeponet --problem darcy_deeponet_v2
+PROBLEMS["darcy_deeponet_v2"] = {
+    **PROBLEMS["darcy_deeponet"],
+    "data_path": "data/darcy_deeponet_v2.pt", "data_seed": 20261106, "init_seed": 0,
+    "n_validation": 32, "validation_every": 100,
+    "sesav": {"k": 2.0}, "default_mobility": "amsgrad",
+    **{method: {"momentum": 0.9, "alpha": 0.5,
+                "amsgrad": {"lr": 0.01, "relax": True, "beta2": 0.999, "eps": 1e-8}}
+       for method in ("pb_sav_momentum", "pb_sesav_momentum")},
+    "sgd": {"lr": 0.03, "momentum": 0.9},
+    "adam": {"betas": (0.9, 0.999), "eps": 1e-8}, "reference_baseline_lr": 0.003,
+}

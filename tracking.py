@@ -120,7 +120,7 @@ def build_config(resolved):
                 partition_rng=resolved.get("partition_rng", "torch"),
                 group_indices=resolved["group_indices"],
             )
-        elif problem == "darcy_deeponet":
+        elif problem in ("darcy_deeponet", "darcy_deeponet_v2"):
             for key in ("grid_size", "n_test", "correlation_length", "permeability_values",
                         "field_threshold", "gaussian_mode", "gaussian_truncate",
                         "reference_residual_tol", "data_seed"):
@@ -129,6 +129,13 @@ def build_config(resolved):
                         "pool_size", "latent_dim", "trunk_hidden_layers"):
                 network[key] = resolved[key]
             network["initialization"] = {"seed": resolved["init_seed"]}
+            if problem == "darcy_deeponet_v2":
+                for key in ("n_validation", "normalization", "training_rms", "data_sha256"):
+                    data[key] = resolved[key]
+                experiment.update(initial_parameters_sha256=resolved["initial_parameters_sha256"],
+                                  validation_every=resolved["validation_every"],
+                                  validation_metric="mean_per_field_relative_l2",
+                                  objective_normalization=resolved["objective_normalization"])
         experiment.update(data=data, network=network)
         experiment["batch_policy"] = resolved["batch_policy"]
         if resolved["batch_policy"] != "full_batch":
