@@ -94,6 +94,19 @@ def build_config(resolved):
                 partition_rng=resolved.get("partition_rng", "torch"),
                 group_indices=resolved["group_indices"],
             )
+        elif problem in ("burgers_pinn", "burgers_inverse_pinn"):
+            for key in ("nu", "x_min", "x_max", "t_max", "grid_nx", "grid_nt", "reference_refine",
+                        "n_collocation", "n_initial", "n_boundary", "n_validation",
+                        "data_seed", "data_sha256", "lambda_reg"):
+                data[key] = resolved[key]
+            if problem == "burgers_inverse_pinn":
+                data.update(n_observations=resolved["n_observations"], nu_init=resolved["nu_init"])
+            for key in ("hidden_layers", "width"):
+                network[key] = resolved[key]
+            network["initialization"] = {"seed": resolved["init_seed"]}
+            experiment.update(diagnostic_every=resolved["diagnostic_every"],
+                              component_names=resolved["component_names"],
+                              objective_note=resolved["objective_note"])
         elif problem in ("darcy_deeponet", "darcy_deeponet_v2"):
             for key in ("grid_size", "n_test", "correlation_length", "permeability_values",
                         "field_threshold", "gaussian_mode", "gaussian_truncate",
@@ -224,6 +237,25 @@ def _json_value(value):
     if isinstance(value, (list, tuple)):
         return [_json_value(item) for item in value]
     return value
+
+
+class NullRecorder:
+    """Recorder used when W&B is off: records nothing and writes no files."""
+
+    run = None
+    io_seconds = 0.0
+
+    def record(self, row):
+        pass
+
+    def finish(self, status, *, error=None, extra=None):
+        return {"status": status, **(extra or {})}
+
+
+def make_recorder(resolved, name, enabled=None):
+    """Return a WandbRecorder when enabled (default: WANDB["enabled"]), else a NullRecorder."""
+    enabled = WANDB["enabled"] if enabled is None else enabled
+    return WandbRecorder(resolved, name) if enabled else NullRecorder()
 
 
 class WandbRecorder:

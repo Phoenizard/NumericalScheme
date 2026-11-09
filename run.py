@@ -13,16 +13,23 @@ from optimizer import adam, adamw, gd, pb_sav, pb_sav_momentum, sav, sgd
 from problem import nonlinear_regression, quadratic
 from problem.config import PROBLEMS
 from train import train
-from tracking import WandbRecorder, load_reference_run
+from tracking import load_reference_run, make_recorder
 
 METHODS = ("gd", "sgd", "adamw", "adam", "sav", "pb_sav", "pb_sav_momentum")
 BASELINES = ("gd", "sgd", "adamw", "adam")
+BURGERS = ("burgers_pinn", "burgers_inverse_pinn")
 
 
 def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
-                   relax: bool | None = None, mobility=None, reference_run=None):
-    """Assemble one problem and optimizer, then stream its records to W&B."""
+                   relax: bool | None = None, mobility=None, reference_run=None,
+                   wandb: bool | None = None, seed=None):
+    """Assemble one problem and optimizer; records go to W&B only when enabled."""
     settings = PROBLEMS[problem].copy()
+    is_burgers = problem in BURGERS
+    if seed is not None:
+        if not is_burgers or seed not in settings["seeds"]:
+            raise ValueError("--seed is only used by the Burgers problems, from their seeds")
+        settings["init_seed"] = seed
     if problem == "nonlinear_regression" and method in ("sgd", "pb_sav_momentum"):
         settings.update(settings["legacy_momentum"])
     config = settings.copy()
@@ -56,6 +63,17 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
             raise ValueError("The current Darcy implementation is configured for CPU float64")
         if settings.get("line_search") is not None:
             raise ValueError("The Darcy protocol requires a fixed learning rate")
+    if is_burgers:
+        if method not in ("sgd", "adamw", "adam", "pb_sav_momentum"):
+            raise ValueError(f"{method} is not configured for {problem}")
+        if loss is not None:
+            raise ValueError("Burgers uses its fixed PINN objective; omit --loss")
+        if is_pb_momentum and m not in (1, 4):
+            raise ValueError("Burgers PB-SAV momentum requires --m 1 (aggregate) or 4")
+        if not is_pb_momentum and m is not None:
+            raise ValueError("--m is only used by PB-SAV momentum on Burgers")
+        if settings["device"] != "cpu" or settings["dtype"] != "float64":
+            raise ValueError("The Burgers PINN is configured for CPU float64")
     step_fn = {
         "adam": adam.step, "gd": gd.step, "sav": sav.step, "pb_sav": pb_sav.step,
         "sgd": sgd.step, "adamw": adamw.step, "pb_sav_momentum": pb_sav_momentum.step,
@@ -119,6 +137,9 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
         lr = (settings[method]["amsgrad"]["lr"] if mobility == "amsgrad"
               else settings[method].get("lr", lr))
         line_search = None
+    if is_burgers and is_pb_momentum and m == 1 and mobility == "amsgrad":
+        lr = settings[method]["amsgrad"].get("lr_one_component", lr)
+    shift_weights = None
     controller = None
     geometry_fn = None
     if problem == "nonlinear_regression":
@@ -187,6 +208,48 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
                           objective_normalization="mean((prediction-u_train/scale)^2)/2 + lambda*||theta||^2/2")
         else:
             metrics_fn = partial(darcy_deeponet.metrics, model, data, settings["lambda_reg"])
+    elif is_burgers:
+        from network.burgers_pinn import BurgersPINN
+        from problem import burgers_pinn
+
+        inverse = problem == "burgers_inverse_pinn"
+        data_path = root / settings["data_path"]
+        data = burgers_pinn.load_data(settings)
+        model = BurgersPINN(settings, inverse=inverse)
+        parameters = tuple(model.parameters())
+        points = burgers_pinn.sample_points(settings, settings["init_seed"], data, inverse)
+        coupled = method != "adamw"  # AdamW applies weight decay in the step instead
+        components = m if is_pb_momentum else 1
+        loss_fn = partial(
+            burgers_pinn.split_energy_loss, model, points, settings["lambda_reg"],
+            inverse=inverse, components=components, coupled=coupled,
+        )
+        if is_pb_momentum:
+            shift_weights = burgers_pinn.shift_weights(settings, inverse, components)
+            step_fn = partial(step_fn, shift_weights=shift_weights)
+        metrics_fn = burgers_pinn.Metrics(
+            model, data, points, settings, inverse=inverse, coupled=coupled,
+            every=settings["diagnostic_every"], steps=settings["steps"],
+        )
+        loss = "burgers_pinn_energy"
+        if is_pb_momentum:
+            name += f"_m{components}"
+        if method in ("sgd", "pb_sav_momentum"):
+            name += f"_momentum{momentum:g}"
+        name += f"_seed{settings['init_seed']}"
+        config.update(
+            model="tanh_pinn", data=str(data_path.resolve()), n_train=settings["n_collocation"],
+            data_sha256=data["sha256"], reference_refinement_error=
+            data["refinement_relative_error"].item(),
+            batch_size=settings["n_collocation"], components=components,
+            component_names=burgers_pinn.component_names(inverse, components, coupled),
+            dimension=sum(p.numel() for p in parameters), initial_value=None,
+            line_search=None, step_policy="fixed", coupled_l2_in_loss=coupled,
+            grouping="four_components" if components == 4 else "aggregate",
+            objective_normalization="Eq. (76)-(79): MSE-based energies; E_wd = lambda*||theta||^2/2",
+            objective_note="task objective = objective - coupled_regularization",
+            reproduction_status="declared_defaults_not_exact_author_replication",
+        )
     elif problem == "nonlinear_regression":
         if loss is not None:
             raise ValueError("--loss is only used by quadratic")
@@ -283,9 +346,11 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
                            "eps": config["optimizer_settings"].get("eps", 1e-8)}
         with torch.no_grad():
             initial_state = pb_sav_momentum.initialize(
-                parameters, loss_fn(), total_shift, **initial_options,
+                parameters, loss_fn(), total_shift, shift_weights=shift_weights, **initial_options,
             )
-        config["component_shift"] = total_shift / config["components"]
+        config["component_shift"] = (
+            [total_shift * weight for weight in shift_weights] if shift_weights is not None
+            else total_shift / config["components"])
         config["momentum_initialization"] = "p=0; displacement=M*p"
     if relax:
         name += "_relaxed"
@@ -300,7 +365,7 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
     if data_path is not None:
         config["data_path"] = str(data_path.resolve())
 
-    recorder = WandbRecorder(config, name)
+    recorder = make_recorder(config, name, wandb)
     history = []
     started = perf_counter()
 
@@ -316,7 +381,7 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
             total_shift=total_shift, relax=relax,
             method=method, line_search=line_search, history=history,
             metrics_fn=metrics_fn,
-            metrics_every=settings.get("validation_every", 1),
+            metrics_every=1 if is_burgers else settings.get("validation_every", 1),
             initial_state=initial_state, on_record=recorder.record,
             controller=controller, geometry_fn=geometry_fn,
         )
@@ -335,7 +400,11 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
               f"test relative L2 = {history[-1]['test_relative_l2']:.8e}")
     elif darcy_v2:
         print(f"  Validation relative L2 = {history[-1]['validation_relative_l2']:.8e}")
-    print(f"  W&B: {recorder.run.url}")
+    elif is_burgers:
+        task = history[-1]["objective"] - history[-1]["coupled_regularization"]
+        print(f"  Task objective = {task:.8e}; relative L2 = {history[-1]['relative_l2']:.8e}")
+    if recorder.run is not None:
+        print(f"  W&B: {recorder.run.url}")
     return history
 
 
@@ -343,12 +412,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--problem", choices=list(PROBLEMS), default="quadratic")
     parser.add_argument("--method", choices=METHODS, default="pb_sav")
+    parser.add_argument("--wandb", action=argparse.BooleanOptionalAction, default=None,
+                        help="Record to W&B (default: WANDB['enabled'] in problem/config.py, off)")
     parser.add_argument("--relax", action=argparse.BooleanOptionalAction, default=None,
                         help="Enable/disable Relax (default: problem configuration)")
     parser.add_argument("--mobility", choices=["identity", "amsgrad"],
                         help="PB momentum mobility; amsgrad uses its fixed problem settings")
     parser.add_argument("--m", type=int, choices=[1, 2, 4, 8, 15, 16, 30],
-                        help="Number of nonlinear-regression energy components")
+                        help="Energy components: nonlinear regression, or 1/4 for Burgers PB-SAV")
+    parser.add_argument("--seed", type=int,
+                        help="Burgers paired seed (default: first seed in the problem config)")
     parser.add_argument("--loss", choices=["split", "total"],
                         help="Quadratic energy splitting (SGD/AdamW default: total)")
     parser.add_argument("--reference-run",

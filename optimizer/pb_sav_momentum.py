@@ -5,7 +5,19 @@ import math
 import torch
 
 
-def initialize(parameters, terms, total_shift: float, *, mobility="identity", eps=1e-8) -> dict:
+def _component_shifts(total_shift, shift_weights, count, like):
+    """Split total_shift over components: equally, or by weights summing to one."""
+    if shift_weights is None:
+        return like.new_full((count,), total_shift / count)
+    weights = like.new_tensor(shift_weights)
+    if weights.shape != (count,) or (weights < 0).any() or not torch.isclose(
+            weights.sum(), like.new_ones(())):
+        raise ValueError("shift_weights must be nonnegative, sum to one, one per component")
+    return total_shift * weights
+
+
+def initialize(parameters, terms, total_shift: float, *, mobility="identity", eps=1e-8,
+               shift_weights=None) -> dict:
     """Initialize q=sqrt(sum(E_i)+C), zero displacement and energy diagnostics."""
     if not math.isfinite(total_shift) or total_shift < 0:
         raise ValueError("PB-SAV momentum requires a finite nonnegative total_shift")
@@ -14,7 +26,8 @@ def initialize(parameters, terms, total_shift: float, *, mobility="identity", ep
     if not math.isfinite(eps) or eps <= 0:
         raise ValueError("PB-SAV mobility eps must be finite and positive")
     terms = [terms] if isinstance(terms, torch.Tensor) else list(terms)
-    shifted = torch.stack([term.detach() for term in terms]) + total_shift / len(terms)
+    energies = torch.stack([term.detach() for term in terms])
+    shifted = energies + _component_shifts(total_shift, shift_weights, len(terms), energies)
     if shifted.ndim != 1 or not torch.isfinite(shifted).all() or (shifted <= 0).any():
         raise ValueError("PB-SAV momentum requires positive finite shifted component energies")
     flat = torch.cat([parameter.detach().reshape(-1) for parameter in parameters])
@@ -31,10 +44,11 @@ def initialize(parameters, terms, total_shift: float, *, mobility="identity", ep
 
 def step(parameters, loss_fn, state: dict, lr: float, *, total_shift: float,
          momentum: float = 0.9, alpha: float = 0.5, relax: bool = False,
-         mobility="identity", beta2=0.999, eps=1e-8) -> dict:
+         mobility="identity", beta2=0.999, eps=1e-8, shift_weights=None) -> dict:
     """Update parameters in place; return detached state without mutating input state.
 
-    Equal component shifts sum to total_shift. The previous displacement is M*p.
+    Component shifts sum to total_shift: equal, or total_shift*shift_weights.
+    The previous displacement is M*p.
     The dissipated energy is q**2 + p.T*M*p/(2*lr); lr must remain fixed.
     Optional full Relax includes kinetic energy in its scalar energy budget.
     """
@@ -55,7 +69,8 @@ def step(parameters, loss_fn, state: dict, lr: float, *, total_shift: float,
     parameters = tuple(parameters)
     terms = loss_fn()
     terms = [terms] if isinstance(terms, torch.Tensor) else list(terms)
-    shifted = torch.stack([term.detach() for term in terms]) + total_shift / len(terms)
+    energies = torch.stack([term.detach() for term in terms])
+    shifted = energies + _component_shifts(total_shift, shift_weights, len(terms), energies)
     if shifted.ndim != 1 or not torch.isfinite(shifted).all() or (shifted <= 0).any():
         raise FloatingPointError("PB-SAV momentum encountered nonpositive component energy")
     Q = shifted.sum().sqrt()

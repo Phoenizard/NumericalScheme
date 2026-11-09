@@ -1,6 +1,7 @@
 """Fixed settings for each problem; research variables belong to the CLI."""
 
 WANDB = {
+    "enabled": False,  # Default off; enable per run with --wandb.
     "entity": "pheonizard-university-of-nottingham",
     "project": "NumericalScheme",
     "init_timeout": 30,
@@ -137,6 +138,38 @@ PROBLEMS["quadratic_fixed_lr"] = {
     "line_search": None,
     "reference_baseline_lr": 0.1,  # Fixed-rate AdamW / Adam reference.
     "adam": {"betas": (0.9, 0.999), "eps": 1e-8},
+}
+
+# 正向 Burgers PINN：PB_SAV_Momentum.pdf §4.4。种子、数据生成与 Sobol 细节为已声明的默认值。
+# 首次生成参考解：python -B -m problem.burgers_pinn
+PROBLEMS["burgers_pinn"] = {
+    "nu": 0.01, "x_min": -1.0, "x_max": 1.0, "t_max": 1.0,
+    "grid_nx": 256, "grid_nt": 101,
+    "reference_refine": 8, "reference_rtol": 1e-10, "reference_atol": 1e-12,
+    "data_path": "data/burgers_pinn.pt", "data_seed": 42,
+    "n_collocation": 10000, "n_initial": 256, "n_boundary": 256, "n_validation": 10000,
+    "hidden_layers": 6, "width": 64,
+    "init_seed": 42, "seeds": [42, 2273, 2669, 5439, 8041],  # 同一种子控制初值与 Sobol 置乱
+    "lr": 1e-3, "steps": 10000, "lambda_reg": 1e-6,
+    "total_shift": 1e-12,  # 1/4 给权重衰减，其余按样本数分配
+    "relax": False, "line_search": None, "diagnostic_every": 50,
+    "default_mobility": "amsgrad",
+    "sgd": {"lr": 1e-2, "momentum": 0.9},
+    "adamw": {"betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 1e-6},
+    "adam": {"betas": (0.9, 0.999), "eps": 1e-8}, "reference_baseline_lr": 1e-3,
+    "pb_sav_momentum": {"momentum": 0.9, "alpha": 0.5,
+                        "amsgrad": {"lr": 1e-3, "relax": True, "beta2": 0.999, "eps": 1e-8}},
+    "device": "cpu", "dtype": "float64", "num_threads": 4,
+}
+
+# 反向 Burgers PINN：§4.5。未知粘性 nu = exp(xi)，初值 0.02；100 个无噪内部观测。
+PROBLEMS["burgers_inverse_pinn"] = {
+    **PROBLEMS["burgers_pinn"],
+    "nu_init": 0.02, "n_observations": 100, "lambda_reg": 3e-7,
+    "adamw": {"betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 3e-7},
+    "pb_sav_momentum": {"momentum": 0.9, "alpha": 0.5,
+                        "amsgrad": {"lr": 1e-2, "lr_one_component": 3e-3, "relax": True,
+                                    "beta2": 0.999, "eps": 1e-8}},
 }
 
 # Darcy v2 与报告共用三组独立样本、训练集 RMS 和 seed 0 初值。
