@@ -1,8 +1,6 @@
 """Two-phase Darcy data, conservative finite differences and supervised losses."""
 
 import argparse
-import hashlib
-import json
 from pathlib import Path
 
 import numpy as np
@@ -15,17 +13,7 @@ import torch
 from problem.config import PROBLEMS
 
 
-def _splits(settings):
-    return ("train", "validation", "test") if "n_validation" in settings else ("train", "test")
-
-
-def tensor_hash(tensors):
-    """Hash tensor names, shapes, dtypes and values as in the Darcy v2 records."""
-    digest = hashlib.sha256()
-    for name, tensor in sorted(tensors.items()):
-        digest.update(json.dumps([name, str(tensor.dtype), list(tensor.shape)]).encode())
-        digest.update(tensor.detach().cpu().contiguous().numpy().tobytes())
-    return digest.hexdigest()
+SPLITS = ("train", "test")
 
 
 def data_config(settings):
@@ -40,9 +28,6 @@ def data_config(settings):
         grid="uniform_nodes_including_boundary", normalization="none", dtype="float64",
         random_streams="SeedSequence.spawn(2)/PCG64", smoothing="ell/(sqrt(2)*h)",
     )
-    if "n_validation" in settings:
-        config.update(n_validation=settings["n_validation"], normalization="training_RMS_no_centering",
-                      random_streams="SeedSequence.spawn(3)/PCG64")
     return config
 
 
@@ -103,7 +88,7 @@ def generate_data(settings=None, output=None) -> Path:
     if path.exists():
         raise FileExistsError(f"Darcy data already exists: {path}")
     grid_size = settings["grid_size"]
-    splits = _splits(settings)
+    splits = SPLITS
     if grid_size < 3 or min(settings[f"n_{split}"] for split in splits) < 1:
         raise ValueError("Require grid_size >= 3 and nonempty training/test datasets")
     if not np.isfinite(settings["correlation_length"]) or settings["correlation_length"] <= 0:
@@ -142,8 +127,6 @@ def generate_data(settings=None, output=None) -> Path:
     axis = torch.linspace(0, 1, grid_size, dtype=torch.float64)
     data["coordinates"] = torch.stack(torch.meshgrid(axis, axis, indexing="ij"), dim=-1)
     data["coordinates"] = data["coordinates"].reshape(-1, 2)
-    if "validation" in splits:
-        data["scale"] = data["u_train"].square().mean().sqrt()
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("xb") as file:
         torch.save(data, file)
@@ -162,7 +145,7 @@ def load_data(settings):
     if data["coordinates"].dtype != torch.float64 or not torch.equal(
             data["coordinates"], coordinates):
         raise ValueError("Darcy data has inconsistent nodal coordinates")
-    for split in _splits(settings):
+    for split in SPLITS:
         fields, solutions = data[f"a_{split}"], data[f"u_{split}"]
         count = settings[f"n_{split}"]
         if fields.shape != (count, 1, grid_size, grid_size) or solutions.shape != (
@@ -180,13 +163,6 @@ def load_data(settings):
         grid = solutions.reshape(count, grid_size, grid_size)
         if torch.count_nonzero(grid[:, [0, -1], :]) or torch.count_nonzero(grid[:, :, [0, -1]]):
             raise ValueError(f"Darcy {split} reference does not satisfy the zero boundary")
-    if "n_validation" in settings:
-        rms = data["u_train"].square().mean().sqrt()
-        if not torch.isclose(data["scale"], rms, rtol=1e-14, atol=0) or rms <= 0:
-            raise ValueError("Invalid Darcy training RMS")
-        tensors = {key: value for key, value in data.items() if isinstance(value, torch.Tensor)}
-        tensors.update({f"residual_{s}": r for s, r in data["reference_residuals"].items()})
-        data["sha256"] = tensor_hash(tensors)
     return data
 
 
@@ -209,21 +185,10 @@ def metrics(model, data, lambda_reg):
             "test_relative_l2": relative.mean().item()}
 
 
-@torch.no_grad()
-def validation_metrics(model, data):
-    """Evaluate the mean per-field relative L2 error in physical units."""
-    prediction = data["scale"] * model(data["a_validation"], data["coordinates"])
-    target = data["u_validation"]
-    return {"validation_relative_l2": ((prediction - target).norm(dim=1)
-                                       / target.norm(dim=1)).mean().item()}
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--problem", choices=("darcy_deeponet", "darcy_deeponet_v2"),
-                        default="darcy_deeponet")
     parser.add_argument("--output", type=Path, help="New dataset path; defaults to problem config")
     args = parser.parse_args()
-    settings = PROBLEMS[args.problem]
+    settings = PROBLEMS["darcy_deeponet"]
     torch.set_num_threads(settings["num_threads"])
     print(f"Data: {generate_data(settings, args.output).resolve()}")

@@ -11,7 +11,10 @@ Q_METHODS = ("sav", "pb_sav")
 
 
 def _armijo_step(parameters, loss_fn, update_fn, initial_lr, settings, iteration):
-    """Recompute each trial at its learning rate, restarting from initial_lr every update."""
+    """Accept the controller's trial rate if the Armijo inequality holds, else halve it.
+
+    initial_lr is the controller's trial rate; a rejected trial restores the parameters.
+    """
     original = [parameter.detach().clone() for parameter in parameters]
     terms = loss_fn()
     energy = terms if isinstance(terms, torch.Tensor) else sum(terms)
@@ -78,7 +81,10 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
           on_record=None, controller=None, geometry_fn=None, metrics_every=1):
     """Record initial/accepted states and pass a copy of each row to optional on_record."""
     if controller is not None and (geometry_fn is None or line_search is None):
-        raise ValueError("Curvature damping requires geometry and Armijo settings")
+        raise ValueError("Curvature damping requires geometry and Armijo acceptance settings")
+    if line_search is not None and controller is None:
+        raise ValueError("The Armijo inequality is only used to accept the curvature "
+                         "controller's trial rate; use a fixed learning rate otherwise")
     if method == "pb_sav_momentum" and line_search is not None:
         raise ValueError("PB momentum currently requires a fixed learning rate")
     if method in Q_METHODS or method == "pb_sav_momentum":
@@ -134,23 +140,13 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
             accepted_lr = lr
             if line_search is not None:
                 def trial_update(trial_lr):
-                    if method == "gd":
-                        return step_fn(parameters, loss_fn, trial_lr)
-                    if method == "sgd":
-                        return step_fn(parameters, loss_fn, trial_lr, state=state)
-                    if method in ("adamw", "adam"):
-                        return step_fn(parameters, loss_fn, state, trial_lr)
                     return step_fn(
                         parameters, loss_fn, q.clone(), trial_lr, total_shift, relax,
                     )
 
-                accepted_state, accepted_lr, backtracks = _armijo_step(
+                q, accepted_lr, backtracks = _armijo_step(
                     parameters, loss_fn, trial_update, trial_lr, line_search, iteration + 1,
                 )
-                if method in Q_METHODS:
-                    q = accepted_state
-                elif method != "gd":
-                    state = accepted_state
             elif method == "gd":
                 step_fn(parameters, loss_fn, lr)
             elif method == "sgd":

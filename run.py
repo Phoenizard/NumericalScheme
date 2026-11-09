@@ -13,7 +13,7 @@ from optimizer import adam, adamw, gd, pb_sav, pb_sav_momentum, sav, sgd
 from problem import nonlinear_regression, quadratic
 from problem.config import PROBLEMS
 from train import train
-from tracking import load_reference_run, make_recorder
+from tracking import make_recorder
 
 METHODS = ("gd", "sgd", "adamw", "adam", "sav", "pb_sav", "pb_sav_momentum")
 BASELINES = ("gd", "sgd", "adamw", "adam")
@@ -21,7 +21,7 @@ BURGERS = ("burgers_pinn", "burgers_inverse_pinn")
 
 
 def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
-                   relax: bool | None = None, mobility=None, reference_run=None,
+                   relax: bool | None = None, mobility=None,
                    wandb: bool | None = None, seed=None):
     """Assemble one problem and optimizer; records go to W&B only when enabled."""
     settings = PROBLEMS[problem].copy()
@@ -30,18 +30,12 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
         if not is_burgers or seed not in settings["seeds"]:
             raise ValueError("--seed is only used by the Burgers problems, from their seeds")
         settings["init_seed"] = seed
-    if problem == "nonlinear_regression" and method in ("sgd", "pb_sav_momentum"):
-        settings.update(settings["legacy_momentum"])
     config = settings.copy()
     root = Path(__file__).resolve().parent
-    reference = None
     data_path = None
     initial_state = None
-    darcy_v2 = problem == "darcy_deeponet_v2"
-    is_darcy = darcy_v2 or problem == "darcy_deeponet"
+    is_darcy = problem == "darcy_deeponet"
     is_pb_momentum = method == "pb_sav_momentum"
-    if reference_run is not None and (not is_pb_momentum or problem != "darcy_deeponet"):
-        raise ValueError("--reference-run is only used by Darcy PB momentum comparisons")
     if mobility is not None and not is_pb_momentum:
         raise ValueError("--mobility is only supported by PB momentum methods")
     mobility = mobility or (settings.get("default_mobility", "identity") if is_pb_momentum else "identity")
@@ -54,8 +48,7 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
     if "num_threads" in settings:
         torch.set_num_threads(settings["num_threads"])
     if is_darcy:
-        baselines = ("sgd", "adam") if darcy_v2 else ("sgd",)
-        if method not in ("pb_sav_momentum", *baselines):
+        if method not in ("pb_sav_momentum", "sgd", "adamw", "adam"):
             raise ValueError(f"{method} is not configured for {problem}")
         if m is not None or loss is not None:
             raise ValueError("Darcy uses its fixed data + L2 objective; omit --m and --loss")
@@ -159,38 +152,28 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
         from problem import darcy_deeponet
 
         data_path = root / settings["data_path"]
-        if is_pb_momentum and not darcy_v2:
-            reference_run = reference_run or settings[method]["reference_run"]
-            reference = load_reference_run(reference_run)
-            shared = ("grid_size", "n_train", "n_test", "correlation_length",
-                      "permeability_values", "data_seed", "init_seed", "conv_channels",
-                      "conv_kernels", "conv_strides", "conv_paddings", "pool_size",
-                      "latent_dim", "trunk_hidden_layers", "lambda_reg", "steps", "lr",
-                      "num_threads")
-            if (reference["method"] != "sgd" or reference.get("status") != "completed"
-                    or any(reference[key] != settings[key] for key in shared)
-                    or reference["optimizer_settings"]["momentum"] != momentum
-                    or reference["device"] != settings["device"]
-                    or reference["dtype"].removeprefix("torch.") != settings["dtype"]):
-                raise ValueError("PB momentum comparison must match the completed SGD reference")
         data = darcy_deeponet.load_data({**settings, "data_path": str(data_path)})
         model = DeepONet(settings)
         parameters = tuple(model.parameters())
-        target = data["u_train"] / data["scale"] if darcy_v2 else data["u_train"]
         loss_fn = partial(
             darcy_deeponet.split_energy_loss, model, data["a_train"], data["coordinates"],
-            target, settings["lambda_reg"],
+            data["u_train"], settings["lambda_reg"],
         )
+        coupled = method != "adamw"  # AdamW applies weight decay in the step instead
+        if not coupled:
+            full_loss = loss_fn
+            loss_fn = lambda: full_loss()[:1]
         loss = "data_plus_l2"
-        if method != "adam":
+        if method in ("sgd", "pb_sav_momentum"):
             name += f"_momentum{momentum:g}"
         name += f"_seed{settings['init_seed']}"
         config.update(
             model="darcy_deeponet", data=str(data_path.resolve()), data_config=data["config"],
-            data_versions=data["versions"], batch_size=len(data["a_train"]), components=2,
+            data_versions=data["versions"], batch_size=len(data["a_train"]),
+            components=2 if coupled else 1,
             dimension=sum(p.numel() for p in parameters), initial_value=None,
             line_search=None, step_policy="fixed", momentum_initialization="zero_displacement",
-            coupled_l2_in_loss=settings["lambda_reg"],
+            coupled_l2_in_loss=settings["lambda_reg"] if coupled else 0.0,
             test_metric="mean_per_field_relative_l2", normalization="none",
             objective_normalization=(
                 "sum_squared_residuals/(2*N_train*N_grid) + lambda*||theta||^2/2"
@@ -199,15 +182,7 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
             timing_scope="loop_and_metrics_excluding_synchronous_recording",
             reproduction_status="declared_defaults_not_exact_author_replication",
         )
-        if darcy_v2:
-            metrics_fn = partial(darcy_deeponet.validation_metrics, model, data)
-            config.pop("test_metric")
-            config.update(data_sha256=data["sha256"], training_rms=data["scale"].item(),
-                          normalization=data["config"]["normalization"],
-                          initial_parameters_sha256=darcy_deeponet.tensor_hash(model.state_dict()),
-                          objective_normalization="mean((prediction-u_train/scale)^2)/2 + lambda*||theta||^2/2")
-        else:
-            metrics_fn = partial(darcy_deeponet.metrics, model, data, settings["lambda_reg"])
+        metrics_fn = partial(darcy_deeponet.metrics, model, data, settings["lambda_reg"])
     elif is_burgers:
         from network.burgers_pinn import BurgersPINN
         from problem import burgers_pinn
@@ -292,7 +267,7 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
         else:
             if method == "sgd" and config["optimizer_settings"].get("momentum", 0):
                 name += f"_momentum{config['optimizer_settings']['momentum']:g}"
-            name += "_armijo" if line_search is not None else f"_lr{lr:g}"
+            name += "_curvature_damping" if controller is not None else f"_lr{lr:g}"
         # Record the loaded data's settings rather than a later edit to the data configuration.
         config.update(data["config"])
         config.update(
@@ -301,7 +276,7 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
             dimension=sum(p.numel() for p in parameters), initial_value=None,
             output_init_bound=settings["hidden_width"] ** -0.5,
             line_search=line_search,
-            step_policy="fixed" if line_search is None else "armijo_lr_reset",
+            step_policy="fixed" if controller is None else "curvature_damping",
             grouping="nested_random_bisection", group_indices=[group.tolist() for group in groups],
             objective_normalization="sum_squared_residuals/(2*N_train) + lambda*||theta||^2/2",
             reproduction_status="declared_defaults_not_exact_author_replication",
@@ -321,7 +296,7 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
         if method in ("sav", "sgd", "adamw", "adam", "pb_sav"):
             if method == "sgd" and config["optimizer_settings"].get("momentum", 0):
                 name += f"_momentum{config['optimizer_settings']['momentum']:g}"
-            name += "_armijo" if line_search is not None else f"_lr{lr:g}"
+            name += "_curvature_damping" if controller is not None else f"_lr{lr:g}"
         config.update(
             model="none", data=None,
             batch_size=None,
@@ -333,12 +308,11 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
             ),
             components=2 if method != "sav" and loss == "split" else 1,
             line_search=line_search,
-            step_policy="fixed" if line_search is None else "armijo_lr_reset",
+            step_policy="fixed" if controller is None else "curvature_damping",
         )
 
     if controller is not None:
         config.update(controller=controller, step_policy="curvature_damping")
-        name = name.replace("_armijo", "_curvature_damping")
     if is_pb_momentum:
         if mobility != "identity":
             name += f"_{mobility}"
@@ -381,7 +355,7 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
             total_shift=total_shift, relax=relax,
             method=method, line_search=line_search, history=history,
             metrics_fn=metrics_fn,
-            metrics_every=1 if is_burgers else settings.get("validation_every", 1),
+            metrics_every=1,
             initial_state=initial_state, on_record=recorder.record,
             controller=controller, geometry_fn=geometry_fn,
         )
@@ -398,8 +372,6 @@ def run_experiment(problem="quadratic", method="pb_sav", m=None, loss=None,
     if problem == "darcy_deeponet":
         print(f"  Data loss = {history[-1]['data_loss']:.8e}; "
               f"test relative L2 = {history[-1]['test_relative_l2']:.8e}")
-    elif darcy_v2:
-        print(f"  Validation relative L2 = {history[-1]['validation_relative_l2']:.8e}")
     elif is_burgers:
         task = history[-1]["objective"] - history[-1]["coupled_regularization"]
         print(f"  Task objective = {task:.8e}; relative L2 = {history[-1]['relative_l2']:.8e}")
@@ -424,8 +396,6 @@ def main():
                         help="Burgers paired seed (default: first seed in the problem config)")
     parser.add_argument("--loss", choices=["split", "total"],
                         help="Quadratic energy splitting (SGD/AdamW default: total)")
-    parser.add_argument("--reference-run",
-                        help="Completed SGD reference: entity/project/run_id (PB momentum only)")
     args = parser.parse_args()
     run_experiment(**vars(args))
 

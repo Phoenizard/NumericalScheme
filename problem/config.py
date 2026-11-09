@@ -34,13 +34,15 @@ PROBLEMS = {
         "steps": 5000,
         "lambda_reg": 3e-5,
         "sgd": {"momentum": 0.9},
+        "adamw": {"betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 3e-5},
+        "adam": {"betas": (0.9, 0.999), "eps": 1e-8}, "reference_baseline_lr": 1e-3,
         "total_shift": 1e-12,  # 论文未给出；按约定取总 shift 1e-12
         "pb_sav_momentum": {
             "momentum": 0.9,
             "alpha": 0.5,
-            "reference_run": None,  # Set entity/project/run_id here or pass --reference-run.
             "amsgrad": {"lr": 3e-3, "relax": True, "beta2": 0.999, "eps": 1e-8},
         },
+        "default_mobility": "amsgrad",
         "relax": False,
         "line_search": None,
         "device": "cpu",
@@ -52,21 +54,18 @@ PROBLEMS = {
         "dimension": 100,
         "initial_value": 1.0,
         "energy_weights": [1.0, 0.01],
-        # 训练：无动量
-        "lr": 100.0,
+        # 训练：固定学习率（论文 §4.1：SAV/PB-SAV 取 10，各方法的最终学习率按学习率协议选取）
+        "lr": 10.0,
         "steps": 300,
         "lambda_reg": 0.0,
         "relax": False,
-        # 与非线性回归相同的 Armijo 配置；每轮重新从 lr 开始
-        "line_search": {
-            "min_lr": 1e-6,
-            "shrink": 0.5,
-            "armijo_c": 1e-4,
-        },
+        "line_search": None,
         # SAV 系列的总 shift
         "total_shift": 1e-10,
+        "sgd": {"lr": 0.990099, "momentum": 0.0},  # 论文 §4.1：最优固定步长 2/(λmin+λmax)
         "adamw": {"betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0},
-        "reference_baseline_lr": 0.1,  # Fixed-rate SGD/AdamW reference.
+        "adam": {"betas": (0.9, 0.999), "eps": 1e-8},
+        "reference_baseline_lr": 0.1,  # Fixed-rate AdamW/Adam reference.
         # 计算
         "device": "cpu",
         "dtype": "float64",
@@ -86,11 +85,6 @@ PROBLEMS = {
         "partition_rng": "numpy",
         "initialization": "centered_normal",
         "hidden_scale": 0.72,
-        "legacy_momentum": {
-            "noise_seed": 1, "partition_seed": 3, "init_seed": 2,
-            "data_path": "data/nonlinear_regression.pt", "data_rng": "torch",
-            "partition_rng": "torch", "initialization": "uniform",
-        },
         "controller": {
             "initial_lr": 1.0, "growth": 1.1, "min_lr": 1e-6, "max_lr": 100.0,
             "damping_safety": 0.5, "maximum_safety": 1.0, "implicit_factor": 2.0,
@@ -103,13 +97,13 @@ PROBLEMS = {
         "hidden_init_min": -1.0,
         "hidden_init_max": 1.0,
         "init_seed": 42,
-        # 当前输出层为 N(0, 1/hidden_width)；uniform 范围只供旧动量设置使用。
+        # 输出层为 N(0, 1/hidden_width)。
         # 训练：全量样本；600 次更新
-        "lr": 100.0,  # 未迁移方法保留旧 Armijo 起点；新策略使用 controller.initial_lr。
+        "lr": 1.0,  # SAV/PB-SAV 的试探学习率由 controller 决定；此值为其初始值。
         "steps": 600,
         "lambda_reg": 0.0,
         "relax": False,
-        # 共同 Armijo 接受条件；新策略的试探起点由 controller 决定。
+        # 曲率控制器的 Armijo 接受条件（充分下降不等式）与回溯参数；其余方法用固定学习率。
         "line_search": {
             "min_lr": 1e-6,
             "shrink": 0.5,
@@ -127,17 +121,6 @@ PROBLEMS = {
         "dtype": "float64",
         "num_threads": 4,
     },
-}
-
-# 二次型固定学习率平台：固定 0.9、3000 步、无线搜索；辅助变量方法开 Relax。
-PROBLEMS["quadratic_fixed_lr"] = {
-    **PROBLEMS["quadratic"],
-    "lr": 0.9,
-    "steps": 3000,
-    "relax": True,
-    "line_search": None,
-    "reference_baseline_lr": 0.1,  # Fixed-rate AdamW / Adam reference.
-    "adam": {"betas": (0.9, 0.999), "eps": 1e-8},
 }
 
 # 正向 Burgers PINN：PB_SAV_Momentum.pdf §4.4。种子、数据生成与 Sobol 细节为已声明的默认值。
@@ -170,17 +153,4 @@ PROBLEMS["burgers_inverse_pinn"] = {
     "pb_sav_momentum": {"momentum": 0.9, "alpha": 0.5,
                         "amsgrad": {"lr": 1e-2, "lr_one_component": 3e-3, "relax": True,
                                     "beta2": 0.999, "eps": 1e-8}},
-}
-
-# Darcy v2 与报告共用三组独立样本、训练集 RMS 和 seed 0 初值。
-# 首次生成数据：python -B -m problem.darcy_deeponet --problem darcy_deeponet_v2
-PROBLEMS["darcy_deeponet_v2"] = {
-    **PROBLEMS["darcy_deeponet"],
-    "data_path": "data/darcy_deeponet_v2.pt", "data_seed": 20261106, "init_seed": 0,
-    "n_validation": 32, "validation_every": 100,
-    "default_mobility": "amsgrad",
-    "pb_sav_momentum": {"momentum": 0.9, "alpha": 0.5,
-                        "amsgrad": {"lr": 0.01, "relax": True, "beta2": 0.999, "eps": 1e-8}},
-    "sgd": {"lr": 0.03, "momentum": 0.9},
-    "adam": {"betas": (0.9, 0.999), "eps": 1e-8}, "reference_baseline_lr": 0.003,
 }

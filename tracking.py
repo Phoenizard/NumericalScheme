@@ -55,13 +55,9 @@ def build_config(resolved):
         if "relaxation_rho" in resolved:
             algorithm["relax"]["rho"] = resolved["relaxation_rho"]
     control = {"lr": resolved["lr"], "strategy": "fixed"}
-    if resolved.get("line_search") is not None:
-        control.update(strategy="armijo", armijo={
-            **resolved["line_search"],
-            "reset_each_iteration": resolved["step_policy"] == "armijo_lr_reset",
-        })
     if resolved.get("step_policy") == "curvature_damping":
-        control.update(strategy="curvature_damping", controller=resolved["controller"])
+        control.update(strategy="curvature_damping", controller=resolved["controller"],
+                       armijo_acceptance=resolved["line_search"])
     experiment = {}
     if problem.startswith("quadratic"):
         experiment.update(dimension=resolved["dimension"], initial_value=resolved["initial_value"])
@@ -107,7 +103,7 @@ def build_config(resolved):
             experiment.update(diagnostic_every=resolved["diagnostic_every"],
                               component_names=resolved["component_names"],
                               objective_note=resolved["objective_note"])
-        elif problem in ("darcy_deeponet", "darcy_deeponet_v2"):
+        elif problem == "darcy_deeponet":
             for key in ("grid_size", "n_test", "correlation_length", "permeability_values",
                         "field_threshold", "gaussian_mode", "gaussian_truncate",
                         "reference_residual_tol", "data_seed"):
@@ -116,13 +112,6 @@ def build_config(resolved):
                         "pool_size", "latent_dim", "trunk_hidden_layers"):
                 network[key] = resolved[key]
             network["initialization"] = {"seed": resolved["init_seed"]}
-            if problem == "darcy_deeponet_v2":
-                for key in ("n_validation", "normalization", "training_rms", "data_sha256"):
-                    data[key] = resolved[key]
-                experiment.update(initial_parameters_sha256=resolved["initial_parameters_sha256"],
-                                  validation_every=resolved["validation_every"],
-                                  validation_metric="mean_per_field_relative_l2",
-                                  objective_normalization=resolved["objective_normalization"])
         experiment.update(data=data, network=network)
         experiment["batch_policy"] = resolved["batch_policy"]
         if resolved["batch_policy"] != "full_batch":
@@ -135,7 +124,7 @@ def build_config(resolved):
 
 
 def read_config(config):
-    """Expose saved settings to existing plotting and reference-run consumers."""
+    """Expose saved settings to existing plotting consumers."""
     if "control" not in config:
         if "experiment" in config and "algorithm" in config:
             return {**config["experiment"], **config["algorithm"],
@@ -145,11 +134,7 @@ def read_config(config):
     result = {**config["experiment"], "method": config["method"], "problem": config["problem"],
               "lr": control["lr"], "relax": algorithm.get("relax", {}).get("enabled", False),
               "components": algorithm.get("pb", {}).get("M", 1)}
-    search = control.get("armijo")
-    result["line_search"] = ({k: v for k, v in search.items() if k != "reset_each_iteration"}
-                             if search else None)
-    result["step_policy"] = ("armijo_lr_reset" if search and search["reset_each_iteration"]
-                             else "armijo" if search else "fixed")
+    result.update(line_search=control.get("armijo_acceptance"), step_policy="fixed")
     if control["strategy"] == "curvature_damping":
         result.update(step_policy="curvature_damping", controller=control["controller"])
     auxiliary = algorithm.get("auxiliary", {})
@@ -193,7 +178,7 @@ def build_tags(config):
     for plugin in ("momentum", "relax"):
         if plugin in config.get("algorithm", {}):
             tags.append(plugin)
-    tags.append({"fixed": "fix_lr", "armijo": "armijo",
+    tags.append({"fixed": "fix_lr",
                  "curvature_damping": "curvature_damping"}[config["control"]["strategy"]])
     tags.append("nonlinear" if config["problem"] == "nonlinear_regression" else config["problem"])
     return tags
@@ -212,20 +197,6 @@ def _sdk(root):
     tempfile.tempdir = os.environ["TMPDIR"]
     import wandb
     return wandb
-
-
-def load_reference_run(path, *, root=ROOT, sdk=None):
-    """Read an explicitly identified completed W&B run, without downloading files."""
-    prefix = f"{WANDB['entity']}/{WANDB['project']}/"
-    if (not isinstance(path, str) or not path.startswith(prefix)
-            or len(path.split("/")) != 3 or not path.split("/")[-1]):
-        raise ValueError(f"Set reference_run to {prefix}<run_id>")
-    sdk = sdk or _sdk(root)
-    reference = sdk.Api(timeout=WANDB["init_timeout"]).run(path)
-    if reference.state != "finished" or reference.summary.get("status") != "completed":
-        raise ValueError("The W&B reference run must have completed successfully")
-    config = dict(reference.config)
-    return {**read_config(config), "status": "completed"}
 
 
 def _json_value(value):
