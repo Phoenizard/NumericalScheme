@@ -40,19 +40,6 @@ PROBLEMS = {
             "reference_run": None,  # Set entity/project/run_id here or pass --reference-run.
             "amsgrad": {"lr": 3e-3, "relax": True, "beta2": 0.999, "eps": 1e-8},
         },
-        "pb_esav_momentum": {
-            "momentum": 0.9,
-            "alpha": 0.5,
-            "reference_run": None,  # Set entity/project/run_id here or pass --reference-run.
-            "amsgrad": {"lr": 3e-3, "relax": True, "beta2": 0.999, "eps": 1e-8},
-        },
-        "pb_sesav_momentum": {
-            "momentum": 0.9,
-            "alpha": 0.5,
-            "reference_run": None,
-            "amsgrad": {"lr": 3e-3, "relax": True, "beta2": 0.999, "eps": 1e-8},
-        },
-        "sesav": {"k": 16.0},
         "relax": False,
         "line_search": None,
         "device": "cpu",
@@ -75,7 +62,7 @@ PROBLEMS = {
             "shrink": 0.5,
             "armijo_c": 1e-4,
         },
-        # SAV 系列的总 shift；ESAV / PB-ESAV 使用冻结初始能量，不使用 shift
+        # SAV 系列的总 shift
         "total_shift": 1e-10,
         "adamw": {"betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0},
         "reference_baseline_lr": 0.1,  # Fixed-rate SGD/AdamW reference.
@@ -127,17 +114,13 @@ PROBLEMS = {
             "shrink": 0.5,
             "armijo_c": 1e-4,
         },
-        # SAV 系列的总 shift；ESAV / PB-ESAV 使用冻结初始能量，不使用 shift
+        # SAV 系列的总 shift
         "total_shift": 1e-10,
         "adamw": {"betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0},
         "reference_baseline_lr": 0.1,
         # 动量对照采用固定学习率；单位缩放、Relax 关闭。
         "sgd": {"lr": 0.1, "momentum": 0.9},
         "pb_sav_momentum": {"lr": 0.1, "momentum": 0.9, "alpha": 0.5},
-        "pb_esav_momentum": {"lr": 0.1, "momentum": 0.9, "alpha": 0.5},
-        "pb_sesav_momentum": {"lr": 0.1, "momentum": 0.9, "alpha": 0.5},
-        # SESAV：r = exp(k E/E0)
-        "sesav": {"k": 16.0},
         # 计算
         "device": "cpu",
         "dtype": "float64",
@@ -145,7 +128,7 @@ PROBLEMS = {
     },
 }
 
-# 二次型固定学习率平台（SESAV 实验）：固定 0.9、3000 步、无线搜索；辅助变量方法开 Relax。
+# 二次型固定学习率平台：固定 0.9、3000 步、无线搜索；辅助变量方法开 Relax。
 PROBLEMS["quadratic_fixed_lr"] = {
     **PROBLEMS["quadratic"],
     "lr": 0.9,
@@ -154,7 +137,6 @@ PROBLEMS["quadratic_fixed_lr"] = {
     "line_search": None,
     "reference_baseline_lr": 0.1,  # Fixed-rate AdamW / Adam reference.
     "adam": {"betas": (0.9, 0.999), "eps": 1e-8},
-    "sesav": {"k": 16.0},
 }
 
 # Darcy v2 与报告共用三组独立样本、训练集 RMS 和 seed 0 初值。
@@ -163,10 +145,9 @@ PROBLEMS["darcy_deeponet_v2"] = {
     **PROBLEMS["darcy_deeponet"],
     "data_path": "data/darcy_deeponet_v2.pt", "data_seed": 20261106, "init_seed": 0,
     "n_validation": 32, "validation_every": 100,
-    "sesav": {"k": 2.0}, "default_mobility": "amsgrad",
-    **{method: {"momentum": 0.9, "alpha": 0.5,
-                "amsgrad": {"lr": 0.01, "relax": True, "beta2": 0.999, "eps": 1e-8}}
-       for method in ("pb_sav_momentum", "pb_sesav_momentum")},
+    "default_mobility": "amsgrad",
+    "pb_sav_momentum": {"momentum": 0.9, "alpha": 0.5,
+                        "amsgrad": {"lr": 0.01, "relax": True, "beta2": 0.999, "eps": 1e-8}},
     "sgd": {"lr": 0.03, "momentum": 0.9},
     "adam": {"betas": (0.9, 0.999), "eps": 1e-8}, "reference_baseline_lr": 0.003,
 }
