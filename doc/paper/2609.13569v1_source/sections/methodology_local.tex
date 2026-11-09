@@ -1,0 +1,127 @@
+\subsection{Local stability and convergence}
+\label{sec:local-stability-convergence}
+
+\subsubsection{Local stability and retained curvature}
+\label{sec:local-stability}
+
+With fixed mobility, the pullback changes the local stability condition at a
+stationary point \(\theta_*\) of \(F\). Throughout this subsection a
+subscript \(*\) denotes evaluation at that point, so that
+\(H_*=\nabla^2F(\theta_*)\) and \(B_*=B_\alpha(\theta_*)\), and
+\((\theta_*,p_*,q_*)\) is the corresponding state of
+\cref{eq:abstract-momentum-step,eq:abstract-momentum-states}. The comparison
+depends on the Hessian curvature left after subtracting twice \(B_*\).
+
+\begin{theorem}
+\label{thm:local-schur-stability}
+Let \(\theta_*\) satisfy \(\nabla F(\theta_*)=0\), suppose the component
+energies are twice continuously differentiable near \(\theta_*\) with
+positive shifted energies, and let \(H_*\succ0\). Fix
+\(0\leq\alpha\leq1\), \(M\succ0\), \(\eta>0\), and
+\(0\leq\beta<1\). The corresponding rest state has \(p_*=0\) and a stored
+scalar \(q_*>0\); set \(\kappa_*=q_*/Q(\theta_*)\). The parameter--momentum block of the
+linearization of \cref{eq:abstract-momentum-step,eq:abstract-momentum-states}
+is Schur stable, meaning that all its eigenvalues have modulus less than one,
+if and only if
+\begin{equation}
+  \kappa_*H_*
+  \prec 2B_*+\frac{2(1+\beta)}{\eta}M^{-1}.
+  \label{eq:local-stability-criterion}
+\end{equation}
+\end{theorem}
+
+The proof, in \cref{app:schur-proof}, reduces the linearized
+parameter--momentum map to a matrix polynomial and then to a scalar quadratic
+in the Rayleigh quotients \(b=\xi^*\widehat B_*\xi/(\xi^*\xi)\) and
+\(h=\xi^*\widehat H_*\xi/(\xi^*\xi)\), where
+\(\widehat B_*=M^{1/2}B_*M^{1/2}\), \(\widehat H_*=M^{1/2}H_*M^{1/2}\),
+and \(\xi^*\) is the conjugate transpose of \(\xi\in\mathbb C^d\).
+
+The unrelaxed scalar equation has a neutral direction at the stationary state;
+the scalar is controlled separately in the local convergence argument below.
+
+\begin{corollary}
+\label{cor:local-step-interval}
+Under the assumptions of \cref{thm:local-schur-stability}, define
+\begin{equation}
+  L_{\mathrm{eff}}
+  =\lambda_{\max}\!\left(
+  M^{1/2}(\kappa_*H_*-2B_*)M^{1/2}\right).
+  \label{eq:effective-local-stiffness}
+\end{equation}
+If \(L_{\mathrm{eff}}>0\), the exact stability interval is
+\begin{equation}
+  0<\eta<\frac{2(1+\beta)}{L_{\mathrm{eff}}}.
+  \label{eq:exact-local-step-interval}
+\end{equation}
+If \(L_{\mathrm{eff}}\leq0\), every finite \(\eta>0\) is admissible.
+At the stationary point,
+\begin{equation}
+  B_1(\theta_*)=0,
+  \qquad B_*=\alpha B_m(\theta_*),
+  \qquad \rank B_m(\theta_*)\leq\min\{d,m-1\}.
+  \label{eq:stationary-component-curvature}
+\end{equation}
+For a common \(\theta_*\), \(q_*\), \(M\), and \(\beta\), increasing
+\(\alpha\) cannot shrink the stability interval relative to the aggregate
+choice \(\alpha=0\).
+\end{corollary}
+
+\begin{proof}
+Apply a congruence by \(M^{1/2}\) to
+\cref{eq:local-stability-criterion}. The total gradient vanishes at
+\(\theta_*\), giving \(B_1(\theta_*)=0\). The component gradients sum
+to zero and are therefore linearly dependent, which gives the rank bound.
+Finally, \(B_m\succeq0\) makes \(L_{\mathrm{eff}}\) nonincreasing with
+\(\alpha\).
+\end{proof}
+
+\begin{remark}
+\label{rem:stationary-cancellation}
+Gradient cancellation can leave nonzero component curvature after the
+aggregate correction has vanished; if all component gradients vanish, so does
+the component correction. Since \(H_*\succ0\), stability for every
+\(\eta>0\) requires \(B_*\succ0\), which \cref{eq:stationary-component-curvature}
+excludes once \(m-1<d\); a low-rank correction can nevertheless enlarge a
+finite interval. The comparison in \cref{cor:local-step-interval} is between
+component and aggregate pullbacks within the momentum update;
+\cref{app:appended-comparison} records the corresponding comparison with the
+frozen appended recurrence, whose stability interval is at least as large.
+\end{remark}
+
+\subsubsection{Local convergence under any scalar relaxation}
+\label{sec:local-relaxed-convergence}
+
+\begin{theorem}
+\label{thm:local-relaxed-convergence}
+Let the component energies be twice continuously differentiable near
+\(\theta_*\), with positive shifted energies,
+\(\nabla F(\theta_*)=0\), and \(H_*\succ0\). Fix
+\(M\succ0\), \(\eta>0\), \(0\leq\beta<1\), and
+\(0\leq\alpha\leq1\), and assume
+\begin{equation}
+  H_*\prec2B_\alpha(\theta_*)+
+  \frac{2(1+\beta)}{\eta}M^{-1}.
+  \label{eq:local-relaxed-stability-condition}
+\end{equation}
+Use the momentum update with \(M^n\equiv M\), the relaxation
+\cref{eq:generic-relaxation} with any sequence \(\rho^n\in[0,1]\), and
+\(q^0=Q(\theta^0)\). There exist \(\delta>0\), \(c_0,c_1<\infty\),
+and \(r\in(0,1)\) such that, whenever
+\(a_0=\norm{\theta^0-\theta_*}+\norm{p^0}<\delta\), the iterates remain
+near \(\theta_*\) and
+\begin{equation}
+  \norm{\theta^n-\theta_*}+\norm{p^n}\leq c_0r^na_0.
+  \label{eq:local-geometric-convergence}
+\end{equation}
+Moreover, \(q^n\to q_\infty>0\), with
+\begin{equation}
+  0\leq Q(\theta_*)-q_\infty\leq c_1a_0^2.
+  \label{eq:local-scalar-limit}
+\end{equation}
+The constants are uniform over all such relaxation sequences, including
+\(\rho^n\equiv1\).
+\end{theorem}
+
+The proof in \cref{app:local-convergence-proof} combines contraction of the
+parameter--momentum map with a quadratic bound on the scalar drift.

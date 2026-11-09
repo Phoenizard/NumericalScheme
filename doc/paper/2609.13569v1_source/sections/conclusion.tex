@@ -1,0 +1,20 @@
+\section{Conclusions}
+\label{sec:conclusion}
+
+We placed the PB--SAV component correction inside an optimizer with momentum
+and an adaptive mobility, applying it to the gradient and the stored momentum
+in a single implicit solve. The update dissipates an exact modified energy for
+every mobility that is nonincreasing in the Loewner order, and its local
+stability at a stationary point is governed by the Hessian minus twice the
+correction. The aggregate correction vanishes at such a point while the
+component correction need not, so resolving the objective into components can
+extend the admissible step sizes. Each iteration adds one dense solve of order
+at most the number of components.
+
+The quadratic and regression tests show that the correction can reproduce a
+reference increment while its error as a matrix remains large. In the forward
+Burgers comparison, four components reduce the mean tail objective by 64.7\%
+and the final solution error by 50.2\% relative to one component at the same
+learning rate and momentum settings. How to choose the components when the
+objective is not already split, and how to do so without one gradient
+evaluation per component, remain open.

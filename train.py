@@ -107,7 +107,8 @@ def train(parameters, loss_fn, step_fn, steps=300, lr=10.0,
                    "lr": accepted_lr, "backtracks": backtracks}
             if method == "pb_sav_momentum":
                 if state is None:
-                    state = pb_sav_momentum.initialize(parameters, terms, total_shift)
+                    raise ValueError("PB-SAV momentum requires an initial_state built with "
+                                     "pb_sav_momentum.initialize (mobility, eps, shift_weights)")
                 row.update(r=state["q"].item(), r_current=(energy + total_shift).sqrt().item())
             elif method in Q_METHODS:
                 current = (energy + total_shift).sqrt()

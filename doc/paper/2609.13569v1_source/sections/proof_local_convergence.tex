@@ -1,0 +1,77 @@
+\begin{proof}[Proof of \cref{thm:local-relaxed-convergence}]
+Set \(z=(\theta-\theta_*,p)\) and \(Q_*=Q(\theta_*)\). Let
+\(T(q,z)\) be the parameter--momentum update, without applying scalar
+relaxation. This map is continuously differentiable near \((Q_*,0)\), and
+\(T(q,0)=0\) for every nearby \(q\). Its derivative
+\(L=D_zT(Q_*,0)\) is Schur stable by
+\cref{thm:local-schur-stability}. The convergent series
+\[
+  P=\sum_{j=0}^{\infty}(L^{\mathsf T})^jL^j
+\]
+defines a positive definite matrix with
+\(L^{\mathsf T}PL=P-I\). Hence \(\norm{L}_P<1\).
+Continuity of \(D_zT\) and integration along the segment from \(0\) to
+\(z\) give a cylinder
+\[
+  \norm{z}_P\leq a_z,\qquad |q-Q_*|\leq a_q<Q_*/2
+\]
+and \(r\in(0,1)\) such that
+\begin{equation}
+  \norm{T(q,z)}_P\leq r\norm{z}_P.
+  \label{eq:local-uniform-contraction}
+\end{equation}
+
+The scalar must remain in this cylinder. Initialization and the acceptance
+rule give the invariant \(0\leq q^n\leq Q(\theta^n)\). Within the cylinder,
+uniformly in \(\rho\in[0,1]\), the increment of
+\cref{eq:abstract-momentum-step} and the scalar increment \(d\) of
+\cref{eq:common-d} satisfy
+\[
+  \norm{\Delta}+\norm{p^+}=O(\norm{z}_P),\qquad
+  d=O(\norm{z}_P^2),\qquad
+  0\leq\mathcal D=O(\norm{z}_P^2).
+\]
+Write the two branches of \cref{eq:generic-relaxation} as
+\(q_{\mathrm{bud}}^2=(q+d)^2+\rho\mathcal D\) and
+\(q_{\mathrm{cap}}^2=Q(\theta+\Delta)^2\). Then
+\[
+  |q_{\mathrm{bud}}^2-q^2|\leq c_4\norm{z}_P^2.
+\]
+Since \(q\leq Q(\theta)\) and \(\nabla F(\theta_*)=0\),
+\[
+  q_{\mathrm{cap}}^2-q^2\geq F(\theta+\Delta)-F(\theta)
+  \geq-c_5\norm{z}_P^2.
+\]
+Both branches are bounded below by \(q^2-c_6\norm{z}_P^2\) with
+\(c_6=\max\{c_4,c_5\}\), while the budget branch bounds their minimum
+above. Thus
+\[
+  |(q^+)^2-q^2|\leq c_6\norm{z}_P^2.
+\]
+Dividing by \(q^++q\geq q\geq Q_*/2\) gives
+\begin{equation}
+  |q^+-q|\leq c_2\norm{z}_P^2.
+  \label{eq:local-scalar-drift}
+\end{equation}
+This estimate covers either selected branch and branch ties.
+
+Because \(\nabla Q(\theta_*)=0\),
+\(|q^0-Q_*|\leq c_3\norm{z^0}_P^2\). Choose the initial neighborhood
+so that \(\norm{z^0}_P<a_z\) and
+\[
+  \left(c_3+\frac{c_2}{1-r^2}\right)\norm{z^0}_P^2<a_q.
+\]
+Induction using \cref{eq:local-uniform-contraction,eq:local-scalar-drift}
+then gives
+\[
+  \norm{z^n}_P\leq r^n\norm{z^0}_P,
+  \qquad
+  |q^n-Q_*|
+  \leq\left(c_3+\frac{c_2}{1-r^2}\right)\norm{z^0}_P^2<a_q.
+\]
+The iterates cannot leave the cylinder, closing the induction. Scalar
+increments are summable, so \(q^n\to q_\infty\geq Q_*/2\). The invariant
+\(q^n\leq Q(\theta^n)\) gives \(q_\infty\leq Q_*\), and the drift
+bound gives \cref{eq:local-scalar-limit}. Equivalence of norms yields
+\cref{eq:local-geometric-convergence}.
+\end{proof}

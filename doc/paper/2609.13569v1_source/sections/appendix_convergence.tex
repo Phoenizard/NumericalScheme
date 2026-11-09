@@ -1,0 +1,225 @@
+\section{Convergence proofs}
+\label[appendix]{app:convergence-proofs}
+
+\subsection{Proof of the modified energy law}
+\label[appendix]{app:energy-law-proof}
+
+\begin{proof}[Proof of \cref{thm:monotone-mobility-dissipation}]
+Take the inner product of \cref{eq:abstract-momentum-balance} with
+\(\Delta\theta^{n+1}=M^{n+1}p^{n+1}\).  Weighted polarization gives
+\begin{align}
+&\frac{(p^{n+1})^{\mathsf T}M^{n+1}
+  (p^{n+1}-\beta p^n)}{\eta}
+\nonumber\\
+&\quad=\frac{1}{2\eta}\left(
+  \norm{p^{n+1}}_{M^{n+1}}^2
+  -\beta^2\norm{p^n}_{M^{n+1}}^2
+  +\norm{p^{n+1}-\beta p^n}_{M^{n+1}}^2\right).
+  \label{eq:weighted-polarization}
+\end{align}
+Insert and subtract \(\norm{p^n}_{M^n}^2/(2\eta)\) to obtain
+\begin{align*}
+&\frac{\norm{p^{n+1}}_{M^{n+1}}^2
+  -\beta^2\norm{p^n}_{M^{n+1}}^2}{2\eta}\\
+&\quad=
+\frac{\norm{p^{n+1}}_{M^{n+1}}^2-\norm{p^n}_{M^n}^2}{2\eta}
++\frac{\norm{p^n}_{M^n-M^{n+1}}^2}{2\eta}
++\frac{1-\beta^2}{2\eta}\norm{p^n}_{M^{n+1}}^2.
+\end{align*}
+Substitute the scalar and pullback identities in
+\cref{eq:common-identities}.  Collecting the scalar and kinetic energy
+changes yields \cref{eq:monotone-mobility-dissipation}.  Each remaining
+term is nonnegative because \(S_m^n\succeq0\),
+\(M^n-M^{n+1}\succeq0\), and \(0\leq\beta<1\).
+\end{proof}
+
+\subsection{Proof of the local stability criterion}
+\label[appendix]{app:schur-proof}
+
+\begin{proof}[Proof of \cref{thm:local-schur-stability}]
+Write \(\widehat H_*=M^{1/2}H_*M^{1/2}\) and
+\(\widehat B_*=M^{1/2}B_*M^{1/2}\). For the linearized variables
+\(x^n=M^{-1/2}(\theta^n-\theta_*)\) and \(w^n=M^{1/2}p^n\),
+\begin{equation}
+  (I_d+\eta\widehat B_*)w^{n+1}
+  =\beta w^n-\eta\kappa_*\widehat H_*x^n,
+  \qquad x^{n+1}=x^n+w^{n+1}.
+  \label{eq:linearized-momentum-map}
+\end{equation}
+Derivatives of the inverse coefficient multiply a zero right-hand side,
+and variations of \(q/Q\) multiply the zero gradient. The invertible change
+of state from \((x^n,w^n)\) to \((x^n,x^n-w^n)\) gives the matrix polynomial
+\begin{equation}
+\begin{aligned}
+  \mathcal P(z)
+  ={}&z^2(I_d+\eta\widehat B_*)\\
+  &-z\bigl((1+\beta)I_d+\eta\widehat B_*
+                     -\eta\kappa_*\widehat H_*\bigr)+\beta I_d.
+\end{aligned}
+\label{eq:local-characteristic-polynomial}
+\end{equation}
+Its determinant vanishes exactly at the eigenvalues of the state map,
+including when \(\beta=0\).
+
+If \(\mathcal P(z)\xi=0\) with \(\xi\in\mathbb C^d\setminus\{0\}\),
+multiplication by \(\xi^*\) gives the scalar quadratic
+\begin{equation}
+  (1+\eta b)z^2
+  -(1+\beta+\eta b-\eta\kappa_*h)z+\beta=0,
+  \label{eq:local-rayleigh-polynomial}
+\end{equation}
+where \(b=\xi^*\widehat B_*\xi/(\xi^*\xi)\geq0\) and
+\(h=\xi^*\widehat H_*\xi/(\xi^*\xi)>0\) are real. The leading
+coefficient exceeds \(\beta\). The values of this polynomial at \(1\) and
+\(-1\) are \(\eta\kappa_*h\) and
+\(2(1+\beta)+2\eta b-\eta\kappa_*h\), respectively, both positive under
+\cref{eq:local-stability-criterion}. Nonreal roots have squared modulus
+\(\beta/(1+\eta b)<1\). For real roots, the same root product and the
+positive values at \(1\) and \(-1\) exclude roots outside \((-1,1)\).
+This proves sufficiency.
+
+Conversely,
+\[
+  \mathcal P(-1)=2(1+\beta)I_d+2\eta\widehat B_*
+                                 -\eta\kappa_*\widehat H_*.
+\]
+If this matrix is singular, \(-1\) is an eigenvalue. If it has a negative
+eigenvalue, \(\mathcal P(-t)\) becomes positive definite for sufficiently
+large \(t\), since its leading coefficient is positive definite.
+Continuity of its smallest eigenvalue gives a singular matrix
+\(\mathcal P(-t)\) at some real \(t>1\), and hence a state eigenvalue \(-t<-1\).
+This proves necessity.
+\end{proof}
+
+\subsection{Comparison with the appended recurrence}
+\label[appendix]{app:appended-comparison}
+
+On a common invariant one-dimensional mode of \(\widehat H_*\) and
+\(\widehat B_*\), let \(h>0\) and \(b\geq0\) be their curvatures.
+If \(b=\kappa_*h\), the characteristic equation reduces to
+\[
+  (1+\eta b)z^2-(1+\beta)z+\beta=0.
+\]
+For \(\beta>0\) and \(\eta b>(1-\beta)^2/(4\beta)\), its roots have modulus
+\(\sqrt{\beta/(1+\eta b)}\), which tends to zero as \(\eta b\to\infty\).
+For \(\beta=0\), the roots are \(0\) and \(1/(1+\eta b)\).
+The frozen appended recurrence has root product \(\beta\), so its spectral
+radius is at least \(\sqrt\beta\). On modes with large \(\eta b\) the
+momentum update therefore has the smaller spectral radius; this is a
+stiff-limit statement, not a uniform rate comparison. Its stability
+condition, however, is
+\[
+  \eta\kappa_*H_*
+  \prec2(1+\beta)(M^{-1}+\eta B_*),
+\]
+which admits at least the interval of the momentum update for the same
+pullback. It follows by diagonalizing the positive definite generalized
+Hessian pair \((H_*,M^{-1}+\eta B_*)\). The interval enlargement in
+\cref{cor:local-step-interval} compares component and aggregate pullbacks
+within the momentum update.
+
+\subsection{Local convergence with scalar relaxation}
+\label[appendix]{app:local-convergence-proof}
+
+\input{sections/proof_local_convergence}
+
+\subsection{Global stationarity estimates}
+\label[appendix]{app:global-stationarity-proofs}
+
+With \(L_B=\sup_n\norm{B_\alpha^n}\), the constants of
+\cref{cor:best-iterate-stationarity} are
+\begin{equation}
+\begin{aligned}
+  C_{\mathrm{mom}}
+  &=\frac{4\eta}{\underline\kappa^2\mu_{\min}}
+  \left[
+    \left(\eta^{-1}+\mu_{\max}L_B\right)^2
+    +\frac{\beta^2\mu_{\max}^2L_B^2}{1-\beta^2}
+  \right],\\
+  C_{\mathrm{dir}}
+  &=\frac{\eta\left(\eta^{-1}+L_B\right)^2}{\underline\kappa^2}.
+\end{aligned}
+  \label{eq:stationarity-constants-families}
+\end{equation}
+One sets \(K=C_{\mathrm{mom}}\) under the assumptions of
+\cref{thm:conditional-stationarity} and \(K=C_{\mathrm{dir}}\) under
+those of \cref{cor:direct-stationarity}.
+
+\begin{proof}[Proof of \cref{thm:conditional-stationarity}]
+Sum \cref{eq:relaxed-energy-bound} and use
+\cref{eq:strict-relaxation-budget} and \(\Hcal^n\geq0\) to obtain
+\(\sum_n\mathcal D^n<\infty\).  The damping and inertial residual terms in
+\cref{eq:monotone-mobility-dissipation}, together with the uniform lower
+mobility bound, imply
+\(
+p^n\to0
+\)
+and
+\(
+p^{n+1}-\beta p^n\to0
+\).
+The uniform upper bound gives
+\(
+\Delta\theta^{n+1}=M^{n+1}p^{n+1}\to0
+\).
+Using these limits and the boundedness of \(B_\alpha^n\) in
+\cref{eq:abstract-momentum-balance} yields
+\(
+(q^n/Q^n)g^n\to0
+\), and the ratio lower bound gives \(g^n\to0\). Since \(F\in C^1\), every
+accumulation point is stationary.
+\end{proof}
+
+\begin{proof}[Proof of \cref{cor:direct-stationarity}]
+The direct update law \cref{eq:base-dissipation} and summability give
+\(\Delta\theta^{n+1}\to0\).  The state
+equation \cref{eq:base-pbsav-step}, the bounded pullback, and the ratio lower
+bound then imply \(g^n\to0\).  The accumulation-point claim follows by
+continuity of \(\nabla F\).
+\end{proof}
+
+\begin{proof}[Proof of \cref{cor:best-iterate-stationarity}]
+For the momentum update, set \(e^n=p^{n+1}-\beta p^n\).  The state
+equation, \(p^{n+1}=e^n+\beta p^n\), and the residual and damping terms in
+\cref{eq:monotone-mobility-dissipation} give
+\begin{align}
+  \frac{q^n}{Q^n}g^n
+  &=-\frac{e^n}{\eta}
+  -B_\alpha^nM^{n+1}(e^n+\beta p^n),\nonumber\\
+  \norm{g^n}
+  &\leq\frac1{\underline\kappa}
+  \left[
+    \left(\eta^{-1}+\mu_{\max}L_B\right)\norm{e^n}
+    +\beta\mu_{\max}L_B\norm{p^n}
+  \right],\nonumber\\
+  \mathcal D^n
+  &\geq\frac{\mu_{\min}}{2\eta}
+  \left(\norm{e^n}^2+(1-\beta^2)\norm{p^n}^2\right).
+  \label{eq:gradient-dissipation-bounds}
+\end{align}
+The inequality \((a+b)^2\leq2a^2+2b^2\) gives
+\(
+\norm{g^n}^2\leq C_{\mathrm{mom}}\mathcal D^n
+\).
+
+For the direct update, \cref{eq:base-pbsav-step} gives
+\begin{equation}
+  \norm{g^n}
+  \leq\frac{\eta^{-1}+L_B}{\underline\kappa}
+  \norm{\Delta\theta^{n+1}},
+  \qquad
+  \mathcal D^n\geq
+  \frac{\norm{\Delta\theta^{n+1}}^2}{\eta},
+\end{equation}
+and therefore
+\(
+\norm{g^n}^2\leq C_{\mathrm{dir}}\mathcal D^n
+\).
+Finally, summing \cref{eq:relaxed-energy-bound} and using
+\cref{eq:strict-relaxation-budget} gives
+\(
+(1-\bar\rho)\sum_{n=0}^{N-1}\mathcal D^n\leq\Hcal^0
+\).
+This proves both estimates in \cref{eq:best-iterate-stationarity}; the
+infinite-series claim follows by letting \(N\to\infty\).
+\end{proof}

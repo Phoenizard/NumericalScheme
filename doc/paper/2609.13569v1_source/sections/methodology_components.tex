@@ -1,0 +1,115 @@
+\subsection{Low-rank implementation and cost per iteration}
+\label{sec:low-rank-realization}
+
+With \(V^n\) as in \cref{eq:pbsav-preview} and
+\(c^n=\tfrac1{Q^n}[\,Q_1^n\ \cdots\ Q_m^n\,]^{\mathsf T}\), we have
+\(\norm{c^n}=1\) and
+\begin{equation}
+  B_\alpha^n
+  =V^n\left[\alpha I_m+(1-\alpha)c^n(c^n)^{\mathsf T}\right](V^n)^{\mathsf T}.
+  \label{eq:true-rank-factor}
+\end{equation}
+Consequently \(\rank(B_\alpha^n)\leq\rank(V^n)\leq m\).  For a concrete
+factor with at most \(m\) columns, define
+\begin{equation}
+  R^n=\left[\alpha I_m+(1-\alpha)c^n(c^n)^{\mathsf T}\right]^{1/2},
+  \qquad
+  W^n=V^nR^n.
+  \label{eq:explicit-low-rank-factor}
+\end{equation}
+Because \(\norm{c^n}=1\), the symmetric positive semidefinite square root has
+the closed form
+\(R^n=\sqrt{\alpha}\,I_m+(1-\sqrt{\alpha})c^n(c^n)^{\mathsf T}\), which at
+\(\alpha=0\) is the rank-one projector \(c^n(c^n)^{\mathsf T}\).  It also
+satisfies
+\(W^n(W^n)^{\mathsf T}=B_\alpha^n\) with \(\rank(W^n)\leq m\).  With
+\begin{equation}
+  f^n=\beta p^n-\eta\frac{q^n}{Q^n}g^n,
+  \label{eq:low-rank-rhs}
+\end{equation}
+the momentum equation is
+\begin{equation}
+  \left((M^{n+1})^{-1}+\eta W^n(W^n)^{\mathsf T}\right)
+  \Delta\theta^{n+1}=f^n.
+  \label{eq:low-rank-system}
+\end{equation}
+
+\begin{algorithm}[!ht]
+\caption{Relaxed PB--SAV momentum with nonincreasing mobility. Use
+\(M^n\equiv I_d\) for Euclidean momentum; for the AMSGrad-type mobility use
+\(v^0=\overline v^0=0\) and \(M^0=\epsilon^{-1}I_d\).}
+\label{alg:pbsav}
+\begin{algorithmic}[1]
+\Require Components \(\{E_i,C_i\}_{i=1}^m\), \(\theta^0\),
+\(q^0=Q(\theta^0)\), \(p^0=0\), number of updates \(N\), \(\eta>0\),
+\(\beta\in[0,1)\), \(\alpha\in[0,1]\), relaxation schedule
+\(\{\rho^n\}_{n=0}^{N-1}\subset[0,1]\), and a mobility initialization and
+update rule satisfying \(0\prec M^{n+1}\preceq M^n\)
+\For{\(n=0,\ldots,N-1\)}
+  \State Evaluate \(E_i(\theta^n)\), \(g_i^n\), \(Q_i^n\), \(Q^n\), and
+  \(g^n=\sum_i g_i^n\).
+  \State Update \(M^{n+1}\) using the prescribed nonincreasing mobility rule.
+  \State Form \(W^n\) from \cref{eq:explicit-low-rank-factor}.
+  \State Form \(f^n\) from \cref{eq:low-rank-rhs}.
+  \State Compute \(\Delta\theta^{n+1}\) from \cref{eq:general-smw}.
+  \State Set \(p^{n+1}=(M^{n+1})^{-1}\Delta\theta^{n+1}\) and
+  \(\theta^{n+1}=\theta^n+\Delta\theta^{n+1}\).
+  \State Compute \(\bar q^{n+1}\) from \cref{eq:relaxation-candidate}.
+  \State Sum the five terms in
+  \cref{eq:monotone-mobility-dissipation} as \(\mathcal D^n\).
+  \State Re-evaluate \(Q(\theta^{n+1})\) and apply
+  \cref{eq:generic-relaxation}.
+\EndFor
+\Ensure \(\theta^N\)
+\end{algorithmic}
+\end{algorithm}
+
+\begin{proposition}
+\label{prop:low-rank-solution}
+The unique solution of \cref{eq:low-rank-system} is
+\begin{equation}
+\begin{aligned}
+  \Delta\theta^{n+1}
+  ={}&M^{n+1}f^n
+  -\eta M^{n+1}W^n
+  \left(I_m+\eta (W^n)^{\mathsf T}M^{n+1}W^n\right)^{-1}\\
+  &\hspace{35mm}\times
+  (W^n)^{\mathsf T}M^{n+1}f^n.
+\end{aligned}
+\label{eq:general-smw}
+\end{equation}
+Besides applying the mobility, the computation requires a dense system of
+order at most \(m\).
+\end{proposition}
+
+\begin{proof}
+The coefficient in \cref{eq:low-rank-system} is positive definite because
+\(M^{n+1}\succ0\) and \(W^n(W^n)^{\mathsf T}\succeq0\).  The
+Sherman--Morrison--Woodbury identity \cite{sherman1950,woodbury1950} with
+base inverse \(M^{n+1}\) gives \cref{eq:general-smw}.
+\end{proof}
+
+\begin{remark}
+\label{rem:cost}
+Each iteration evaluates the \(m\) component energies and gradients that the
+algorithm already forms.  The factor \(R^n\) is available in closed form, so
+\[
+  W^n=\sqrt{\alpha}\,V^n
+  +\bigl(1-\sqrt{\alpha}\bigr)\bigl(V^nc^n\bigr)(c^n)^{\mathsf T}
+\]
+costs one matrix--vector product and needs no eigensolver.
+Evaluating \cref{eq:general-smw} requires the Gram matrix
+\((W^n)^{\mathsf T}M^{n+1}W^n\) and one dense solve of order at most \(m\),
+so the work beyond applying the mobility is \(O(m^2d+m^3)\).  Storage beyond
+the iterate is the \(d\times m\) factor \(W^n\), the momentum \(p^n\), and
+the mobility state.  The relaxation step re-evaluates \(Q(\theta^{n+1})\),
+one objective evaluation per iteration beyond the gradient.
+\end{remark}
+
+
+The direct update omits the momentum and mobility states: it solves
+\(\left(I_d+\eta W^n(W^n)^{\mathsf T}\right)\Delta\theta^{n+1}
+=f_{\mathrm{dir}}^n\) with
+\(f_{\mathrm{dir}}^n=-\eta\frac{q^n}{Q^n}g^n\), using the same reduction to a
+dense system of order at most \(m\), and takes \(\mathcal D^n\) in the scalar
+relaxation from \cref{eq:base-dissipation}.

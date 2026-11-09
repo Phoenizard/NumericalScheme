@@ -1,0 +1,160 @@
+\documentclass[preprint,11pt]{elsarticle}
+
+% Elsevier/Overleaf-compatible manuscript for JCP or CMAME.
+\usepackage{amsmath,amssymb,amsfonts,amsthm,mathtools}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{placeins}
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+\usepackage{enumitem}
+\usepackage{microtype}
+\usepackage{aliascnt}
+\usepackage[hypertexnames=false,hidelinks]{hyperref}
+\usepackage[nameinlink,capitalize]{cleveref}
+\crefname{appendix}{Appendix}{Appendices}
+\crefname{algorithm}{Algorithm}{Algorithms}
+\hypersetup{pdfauthor={Jiahao Zhang; Shiheng Zhang; Guang Lin}}
+\myfooterfont{\fontsize{9}{11}\selectfont\itshape}
+
+\AtBeginDocument{%
+  \setlength{\abovedisplayskip}{6pt plus 2pt minus 2pt}%
+  \setlength{\belowdisplayskip}{6pt plus 2pt minus 2pt}%
+  \setlength{\abovedisplayshortskip}{0pt plus 2pt}%
+  \setlength{\belowdisplayshortskip}{6pt plus 2pt minus 2pt}}
+
+\graphicspath{{figures/}}
+
+\newtheorem{theorem}{Theorem}[section]
+\newaliascnt{proposition}{theorem}
+\newtheorem{proposition}[proposition]{Proposition}
+\aliascntresetthe{proposition}
+\crefname{proposition}{Proposition}{Propositions}
+\newtheorem{lemma}{Lemma}[section]
+\newaliascnt{corollary}{theorem}
+\newtheorem{corollary}[corollary]{Corollary}
+\aliascntresetthe{corollary}
+\crefname{corollary}{Corollary}{Corollaries}
+\theoremstyle{definition}
+\newtheorem{remark}{Remark}[section]
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathcal{E}}
+\newcommand{\Hcal}{\mathcal{H}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\odotv}{\mathbin{\odot}}
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+
+%\journal{Journal of Computational Physics}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\title{A pullback-corrected scalar auxiliary variable optimizer
+  with momentum and adaptive mobility}
+
+\author[label1]{Jiahao Zhang\fnref{equal}} %% Author name
+%\ead{zhan2296@purdue.edu}
+
+\author[label2]{Shiheng Zhang\fnref{equal}}
+%\ead{shzhang3@uw.edu}
+
+\fntext[equal]{These authors contributed equally to this work.}
+
+
+\author[label1,label3]{Guang Lin\corref{cor1}}
+\cortext[cor1]{Corresponding author (guanglin@purdue.edu)}
+%\ead{guanglin@purdue.edu}
+
+%% Author affiliation
+\affiliation[label1]{organization={School of Mechanical Engineering, Purdue University},
+            city={West Lafayette, IN 47906},
+            country={USA}}
+
+\affiliation[label2]{organization={Department of Mathematics, University of Washington},
+            city={Seattle, WA 98195},
+            country={USA}}
+
+\affiliation[label3]{organization={Department of Mathematics, Purdue University},
+            city={West Lafayette, IN 47906},
+            country={USA}}
+
+%% Elsevier requires the highlights as a separate submission file (highlights.tex,
+%% 3-5 bullets, each at most 85 characters). They are kept here for reference and are
+%% not rendered in the manuscript PDF.
+%\begin{highlights}
+%\item PB–SAV uses component gradients to retain curvature information.
+%\item Momentum and adaptive mobility preserve an exact modified energy law.
+%\item A component-space solve keeps the implicit update efficient for small dimensions.
+%\item Component curvature can recover Newton and Gauss–Newton update directions.
+%\item Task-aligned components improve optimization in scientific computing tests.
+%\end{highlights}
+
+\begin{abstract}
+Objectives in scientific machine learning are often prescribed as a sum of
+several terms, such as the residual, boundary, initial, and data losses of a
+physics-informed neural network. In the pullback-corrected scalar auxiliary
+variable (PB--SAV) method, one scalar tracks the shifted objective while the
+component gradients build a positive semidefinite curvature correction of rank
+at most the number of components. We carry that correction into an optimizer
+with momentum and an adaptive mobility, applying it to the gradient and the
+stored momentum in a single implicit solve. A mobility that is nonincreasing
+in the Loewner order yields an exact modified energy law, covering Euclidean
+and AMSGrad-type choices; the corresponding identity for momentum appended
+after the solve carries a cross term of indefinite sign. For a fixed mobility we give a necessary and sufficient
+condition for local stability at a stationary point, depending on the Hessian
+minus twice the correction, and show that it also gives local geometric
+convergence for every scalar relaxation sequence. The implicit solve reduces
+to a dense system whose order is the number of components. In the forward
+Burgers comparison, four components reduce the mean tail objective by 64.7\%
+and the final solution error by 50.2\% relative to one component at the same
+learning rate and momentum settings.
+\end{abstract}
+
+\begin{keyword}
+scalar auxiliary variable \sep energy stability \sep momentum \sep adaptive optimization \sep Gauss--Newton \sep physics-informed neural network \sep operator learning
+\end{keyword}
+
+\end{frontmatter}
+
+\input{sections/introduction}
+\input{sections/background}
+\input{sections/methodology}
+\input{sections/methodology_momentum}
+\input{sections/methodology_energy}
+\input{sections/methodology_relaxation}
+\input{sections/methodology_components}
+\input{sections/methodology_local}
+\input{sections/methodology_stationarity}
+\input{sections/experiments}
+\input{sections/experiments_burgers}
+\input{sections/conclusion}
+
+\section*{Declaration of competing interest}
+The authors declare no known competing financial interests or personal
+relationships that could have appeared to influence the work reported in this
+paper.
+
+\section*{Data and code availability}
+Code and data will be made available in a public repository on publication.
+
+\section*{Acknowledgements}
+We gratefully acknowledge support from the National Science Foundation (DMS-2533878, DMS-2053746, DMS-2134209, ECCS-2328241, CBET-2347401 and OAC-2311848), and U.S.~Department of Energy (DOE) Office of Science Advanced Scientific Computing Research program under the "Uncertainty Quantification for Multifidelity Operator Learning (MOLUcQ)" project (Project No. 81739), DE-SC0023161, the SciDAC LEADS Institute, and DOE–Fusion Energy Science, under grant number: DE-SC0024583.
+
+\appendix
+\renewcommand{\thesubsection}{\Alph{section}.\arabic{subsection}}
+\renewcommand{\thetheorem}{\Alph{section}.\arabic{theorem}}
+\aliascntresetthe{proposition}
+\aliascntresetthe{corollary}
+\input{sections/appendix_convergence}
+\input{sections/appendix_coverage}
+
+\bibliographystyle{elsarticle-num}
+{\footnotesize\bibliography{references}}
+
+\end{document}

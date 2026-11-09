@@ -1,0 +1,67 @@
+\subsection{Scalar relaxation}
+\label{sec:relaxation-convergence}
+
+Relaxed-SAV schemes modify the auxiliary state while preserving a discrete
+energy bound \cite{jiang2022rsav,zhang2022gsavrelax,huang2024optimalrsav}.
+The squared-scalar update below is the relaxation of \cite{zhang2026pbsav};
+it depends on the update only through its Lyapunov functional, so one
+statement covers both updates of this section.
+
+Without relaxation, \(q^{n+1}=q^n+d^{n+1}\) is the stored scalar in
+\cref{eq:direct-family,eq:abstract-momentum-states}. When relaxation is
+applied, the same algebraic output is provisional and is denoted by
+\begin{equation}
+  \bar q^{n+1}=q^n+d^{n+1}.
+  \label{eq:relaxation-candidate}
+\end{equation}
+For the direct update the old and provisional energies are
+\(\Hcal_{\mathrm{dir}}^n=(q^n)^2\) and
+\(\bar\Hcal_{\mathrm{dir}}^{n+1}=(\bar q^{n+1})^2\); for the momentum update
+they are \(\Hcal_{\mathrm{mom}}^n=(q^n)^2+\norm{p^n}_{M^n}^2/(2\eta)\) and
+\(\bar\Hcal_{\mathrm{mom}}^{n+1}=(\bar q^{n+1})^2
++\norm{p^{n+1}}_{M^{n+1}}^2/(2\eta)\).
+
+\begin{proposition}
+\label{prop:generic-relaxation}
+For either update, let \((\Hcal^n,\bar\Hcal^{n+1})\) denote the corresponding
+pair above and suppose that
+\begin{equation}
+  \Hcal^n-\bar\Hcal^{n+1}=\mathcal D^n\geq0.
+  \label{eq:generic-unrelaxed-dissipation}
+\end{equation}
+For \(0\leq\rho^n\leq1\), define
+\begin{equation}
+  (q^{n+1})^2
+  =\min\left\{
+  Q(\theta^{n+1})^2,\;
+  (\bar q^{n+1})^2+\rho^n\mathcal D^n
+  \right\},
+  \qquad q^{n+1}\geq0.
+  \label{eq:generic-relaxation}
+\end{equation}
+Let \(\Hcal^{n+1}\) be the same energy evaluated with the accepted
+scalar \(q^{n+1}\). Then
+\begin{equation}
+  \Hcal^{n+1}
+  \leq\Hcal^n-(1-\rho^n)\mathcal D^n
+  \leq\Hcal^n.
+  \label{eq:relaxed-energy-bound}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Relaxation changes only the scalar part of the new energy.  Therefore
+\(
+\Hcal^{n+1}\leq\bar\Hcal^{n+1}+\rho^n\mathcal D^n
+\), and \cref{eq:generic-unrelaxed-dissipation} gives
+\cref{eq:relaxed-energy-bound}.
+\end{proof}
+
+With \(q^0=Q(\theta^0)\), the accepted scalars satisfy
+\(0\leq q^n\leq Q(\theta^n)\) by \cref{eq:generic-relaxation}.
+Full relaxation \(\rho^n=1\) preserves the modified energy bound; choosing
+\(\rho^n\leq\bar\rho<1\) also gives
+\(\sum_n\mathcal D^n\leq\Hcal^0/(1-\bar\rho)\).
+Under the curvature condition in \ref{app:directional-coverage}, full
+relaxation preserves \(q^n=Q(\theta^n)\), so the momentum energy becomes
+\(F(\theta^n)+C+\norm{p^n}_{M^n}^2/(2\eta)\).

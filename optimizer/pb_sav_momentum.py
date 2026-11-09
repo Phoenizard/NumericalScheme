@@ -13,7 +13,8 @@ def _component_shifts(total_shift, shift_weights, count, like):
     if weights.shape != (count,) or (weights < 0).any() or not torch.isclose(
             weights.sum(), like.new_ones(())):
         raise ValueError("shift_weights must be nonnegative, sum to one, one per component")
-    return total_shift * weights
+    # Renormalize so that sum_i C_i equals total_shift to rounding, as the algorithm requires.
+    return total_shift * weights / weights.sum()
 
 
 def initialize(parameters, terms, total_shift: float, *, mobility="identity", eps=1e-8,

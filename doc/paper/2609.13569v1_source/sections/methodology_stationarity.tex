@@ -1,0 +1,111 @@
+\subsection{Conditional stationarity}
+\label{sec:conditional-stationarity}
+
+For a varying mobility, a global stationarity criterion follows from
+relaxation parameters bounded away from one and from a ratio \(q^n/Q^n\)
+bounded below by a positive constant. Assume
+\begin{equation}
+  0\leq\rho^n\leq\bar\rho<1.
+  \label{eq:strict-relaxation-budget}
+\end{equation}
+The proofs of the following estimates are given in
+\cref{app:global-stationarity-proofs}.
+
+\begin{theorem}
+\label{thm:conditional-stationarity}
+Consider the relaxed momentum update
+\cref{eq:covector-map,eq:abstract-momentum-step,eq:generic-relaxation} with a
+fixed \(0\leq\beta<1\).  Suppose there exist constants
+\begin{equation}
+  0<\mu_{\min}\leq\mu_{\max}<\infty,
+  \qquad \underline\kappa>0,
+  \label{eq:stationarity-constants}
+\end{equation}
+such that, for every \(n\),
+\begin{equation}
+  \mu_{\min}I_d\preceq M^n\preceq\mu_{\max}I_d,
+  \qquad
+  \frac{q^n}{Q^n}\geq\underline\kappa,
+  \qquad
+  0\prec M^{n+1}\preceq M^n.
+  \label{eq:stationarity-assumptions}
+\end{equation}
+Assume also that \(\sup_n\norm{B_\alpha^n}<\infty\) and
+\cref{eq:strict-relaxation-budget} holds.  Then
+\begin{equation}
+  p^n\to0,
+  \qquad
+  p^{n+1}-\beta p^n\to0,
+  \qquad
+  \Delta\theta^{n+1}\to0,
+  \qquad
+  g^n\to0.
+  \label{eq:stationarity-limits}
+\end{equation}
+Consequently, every accumulation point of \(\{\theta^n\}\) is stationary.
+\end{theorem}
+
+
+\begin{remark}
+If \(E_i\geq0\), \(C_i>0\), and
+\(\sup_n\norm{g_i^n}\leq\Gamma_i\), then
+\begin{equation}
+  \norm{B_\alpha^n}
+  \leq \norm{B_m^n}
+  \leq \sum_{i=1}^m\frac{\Gamma_i^2}{2C_i}.
+  \label{eq:bounded-pullback-condition}
+\end{equation}
+For the diagonal realization \cref{eq:adaptive-mobility},
+\(\sup_n\norm{g^n}_\infty\leq\Gamma_\infty\) gives
+\begin{equation}
+  \frac{1}{\Gamma_\infty+\epsilon}I_d\preceq M^n\preceq\frac1\epsilon I_d.
+  \label{eq:bounded-mobility-condition}
+\end{equation}
+The lower bound on \(q^n/Q^n\) must still be assumed separately.
+\end{remark}
+
+\begin{corollary}
+\label{cor:direct-stationarity}
+Consider the relaxed direct update
+\cref{eq:direct-family,eq:generic-relaxation}.  Suppose
+\cref{eq:strict-relaxation-budget} holds,
+\(\sup_n\norm{B_\alpha^n}<\infty\), and there exists \(\underline\kappa>0\)
+such that \(q^n/Q^n\geq\underline\kappa\) for every \(n\).  Then
+\(\Delta\theta^{n+1}\to0\), \(g^n\to0\), and every accumulation point is
+stationary.
+\end{corollary}
+
+
+\begin{corollary}
+\label{cor:best-iterate-stationarity}
+Let
+\(
+L_B=\sup_n\norm{B_\alpha^n}
+\).
+Under the assumptions of \cref{thm:conditional-stationarity} or of
+\cref{cor:direct-stationarity}, there is a constant \(K\), given
+explicitly in \cref{app:global-stationarity-proofs}, depending for the
+momentum update only on \(\eta\), \(\beta\), \(\underline\kappa\), the
+mobility bounds, and \(L_B\), and for the direct update only on \(\eta\),
+\(\underline\kappa\), and \(L_B\).  For either update, let \(\Hcal^0\) be its
+initial modified energy.  Then, for every \(N\geq1\),
+\begin{equation}
+  \sum_{n=0}^{N-1}\norm{g^n}^2
+  \leq \frac{K\Hcal^0}{1-\bar\rho},
+  \qquad
+  \min_{0\leq n<N}\norm{g^n}^2
+  \leq \frac{K\Hcal^0}{(1-\bar\rho)N}.
+  \label{eq:best-iterate-stationarity}
+\end{equation}
+Consequently, \(\sum_{n=0}^\infty\norm{g^n}^2<\infty\), and the best
+gradient norm among the first \(N\) iterates is \(O(N^{-1/2})\).
+\end{corollary}
+
+
+
+Full relaxation admits a different sufficient condition: the pullback must
+cover the true objective remainder along each step, up to a fixed fraction
+of the inertial dissipation. Under this condition, and under the same uniform
+mobility and pullback bounds as \cref{thm:conditional-stationarity},
+\cref{thm:coverage-full-relaxation} gives exact tracking and stationarity
+without a separate lower bound on \(q^n/Q^n\).

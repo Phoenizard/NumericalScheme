@@ -1,0 +1,134 @@
+\section{PB--SAV optimization with momentum and adaptive mobility}
+\label{sec:methodology}
+
+\subsection{Component curvature and the direct PB--SAV step}
+\label{sec:common-notation}
+
+Notation follows \cref{sec:background}, with all component quantities
+evaluated at \(\theta^n\). Each \(E_i\) is continuously differentiable, and
+the shifted component energies are positive along the iterates. Fix
+\(\eta>0\) and initialize \(q^0=Q^0\). Define the curvature gap and the
+interpolation by
+\begin{equation}
+  S_m^n=B_m^n-B_1^n,
+  \qquad
+  B_\alpha^n=B_1^n+\alpha S_m^n,
+  \qquad 0\leq\alpha\leq1.
+  \label{eq:mixed-pullback}
+\end{equation}
+At \(\alpha=0\) this is the aggregate correction \(B_1^n\), and at
+\(\alpha=1\) the component pullback \(B_m^n\). The variance identity
+\cref{eq:background-variance-gap} gives \(S_m^n\succeq0\), so
+\(B_\alpha^n\) increases with \(\alpha\) in the Loewner order. We write
+\(B_1(\theta)\), \(B_m(\theta)\), and \(B_\alpha(\theta)\) for the same
+matrices evaluated at an arbitrary state.
+
+\subsubsection{Curvature retained by a least-squares component}
+
+The scalar residual formula \cref{eq:residual-pullback-curvature} extends to
+vector-valued residuals, which arise when a component contains many residual
+terms.
+
+\begin{proposition}
+\label{prop:block-compression}
+At a fixed parameter state, let
+\(E_i=\tfrac12\norm{r_i}^2\), where
+\(r_i:\R^d\to\R^{k_i}\) is continuously differentiable, and let
+\(J_i=Dr_i\), \(C_i>0\), and \(G=\sum_iJ_i^{\mathsf T}J_i\). Then
+\begin{equation}
+  B_m=\sum_iJ_i^{\mathsf T}
+  \frac{r_i r_i^{\mathsf T}}{\norm{r_i}^2+2C_i}J_i,
+  \qquad 0\preceq B_m\preceq G.
+  \label{eq:block-pullback}
+\end{equation}
+Define
+\begin{equation}
+  \widetilde r_i=\begin{bmatrix}r_i\\\sqrt{2C_i}\end{bmatrix},
+  \qquad
+  \widetilde J_i=\begin{bmatrix}J_i\\0\end{bmatrix},
+  \qquad
+  u_i=\frac{\widetilde r_i}{\norm{\widetilde r_i}}.
+  \label{eq:augmented-block-residual}
+\end{equation}
+For every \(v\in\R^d\),
+\begin{equation}
+  v^{\mathsf T}(G-B_m)v
+  =\sum_i\norm{(I_{k_i+1}-u_i u_i^{\mathsf T})\widetilde J_i v}^2.
+  \label{eq:missed-block-curvature}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Substitute \(g_i=J_i^{\mathsf T}r_i\) into the definition of \(B_m\).
+The matrix \(u_i u_i^{\mathsf T}\) is an orthogonal projector, and
+\(\widetilde J_i^{\mathsf T}\widetilde J_i=J_i^{\mathsf T}J_i\).
+Subtract the projected term from that identity and evaluate on \(v\).
+\end{proof}
+
+\begin{remark}
+\label{rem:retained-curvature}
+Each least-squares component retains the part of its predicted residual
+change parallel to its current residual, carrying the weight
+\(\norm{r_i}^2/(\norm{r_i}^2+2C_i)\) of \cref{eq:block-pullback}; the
+orthogonal part is discarded. At \(r_i=0\) the contribution vanishes even if
+\(J_i^{\mathsf T}J_i\ne0\). For a fixed nonzero residual, the weight tends
+to one as \(C_i\to0\) and decreases toward zero as \(C_i\) grows.
+\end{remark}
+
+\subsubsection{The direct update}
+
+For an increment \(\Delta\theta^{n+1}\), define
+\begin{equation}
+  d^{n+1}
+  =\frac{(g^n)^{\mathsf T}\Delta\theta^{n+1}}{2Q^n}.
+  \label{eq:common-d}
+\end{equation}
+The scalar and pullback increments satisfy, with
+\(\norm{x}_A^2=x^{\mathsf T}Ax\) here and below (a seminorm when the
+symmetric positive semidefinite \(A\) is singular),
+\begin{subequations}
+\label{eq:common-identities}
+\begin{align}
+  (q^n+d^{n+1})^2-(q^n)^2
+  &=2q^nd^{n+1}+(d^{n+1})^2,
+  \label{eq:common-scalar-identity}\\
+  \norm{\Delta\theta^{n+1}}_{B_\alpha^n}^2
+  &=2(d^{n+1})^2
+  +\alpha\norm{\Delta\theta^{n+1}}_{S_m^n}^2.
+  \label{eq:common-pullback-identity}
+\end{align}
+\end{subequations}
+
+The direct PB--SAV update \cite{zhang2026pbsav} is
+\begin{subequations}
+\label{eq:direct-family}
+\begin{align}
+  \left(\eta^{-1}I_d+B_\alpha^n\right)\Delta\theta^{n+1}
+  &=-\frac{q^n}{Q^n}g^n,
+  \label{eq:base-pbsav-step}\\
+  \theta^{n+1}&=\theta^n+\Delta\theta^{n+1},
+  \qquad
+  q^{n+1}=q^n+d^{n+1}.
+  \label{eq:base-pbsav-state}
+\end{align}
+\end{subequations}
+
+\begin{theorem}
+\label{thm:base-dissipation}
+The update \cref{eq:direct-family} satisfies
+\begin{equation}
+  (q^n)^2-(q^{n+1})^2
+  =\frac{\norm{\Delta\theta^{n+1}}^2}{\eta}
+  +(d^{n+1})^2
+  +\alpha\norm{\Delta\theta^{n+1}}_{S_m^n}^2
+  \geq0.
+\label{eq:base-dissipation}
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Take the inner product of \cref{eq:base-pbsav-step} with
+\(\Delta\theta^{n+1}\).  Substitute the two identities in
+\cref{eq:common-identities}, and move the change in scalar energy to the other
+side. Nonnegativity follows from \(S_m^n\succeq0\).
+\end{proof}

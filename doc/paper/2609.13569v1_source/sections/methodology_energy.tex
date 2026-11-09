@@ -1,0 +1,94 @@
+\subsection{Dissipation and mobility choices}
+\label{sec:dissipation-mobilities}
+
+\subsubsection{Modified energy law}
+
+Define, for every \(n\),
+\begin{equation}
+  \Hcal_{\mathrm{mom}}^n
+  =(q^n)^2+\frac{1}{2\eta}\norm{p^n}_{M^n}^2.
+  \label{eq:abstract-momentum-energy}
+\end{equation}
+
+\begin{theorem}
+\label{thm:monotone-mobility-dissipation}
+For \(0\leq\beta<1\) and \(0\prec M^{n+1}\preceq M^n\), the update
+\cref{eq:covector-map,eq:abstract-momentum-step,eq:abstract-momentum-states}
+satisfies
+\begin{equation}
+\begin{aligned}
+  \Hcal_{\mathrm{mom}}^n
+  -\Hcal_{\mathrm{mom}}^{n+1}
+  ={}&\frac{\norm{p^n}_{M^n-M^{n+1}}^2}{2\eta}
+  +\frac{\norm{p^{n+1}-\beta p^n}_{M^{n+1}}^2}{2\eta}\\
+  &+\frac{1-\beta^2}{2\eta}\norm{p^n}_{M^{n+1}}^2
+  +(d^{n+1})^2
+  +\alpha\norm{\Delta\theta^{n+1}}_{S_m^n}^2
+  \geq0.
+\end{aligned}
+\label{eq:monotone-mobility-dissipation}
+\end{equation}
+\end{theorem}
+
+The proof is a weighted polarization of
+\cref{eq:abstract-momentum-balance} against
+\(\Delta\theta^{n+1}=M^{n+1}p^{n+1}\), followed by substitution of
+\cref{eq:common-identities}; it is given in \cref{app:energy-law-proof}.
+
+\begin{remark}
+\label{rem:dissipated-quantity}
+The dissipated quantity is the modified energy \(\Hcal_{\mathrm{mom}}^n\),
+which controls the scalar and kinetic energies together rather than the
+objective \(F(\theta^n)\) alone. Its five nonnegative terms are, in order,
+the dissipation from the mobility change, the inertial residual, the momentum
+damping, the scalar tracking term, and the curvature gap, which the
+relaxation step of \cref{sec:relaxation-convergence} sums.
+\end{remark}
+
+\subsubsection{Euclidean momentum}
+
+Set \(M^n=I_d\) and identify \(p^n=s^n\).  The abstract state equation becomes
+\begin{equation}
+  \left(I_d+\eta B_\alpha^n\right)s^{n+1}
+  =\beta s^n-\eta\frac{q^n}{Q^n}g^n.
+  \label{eq:euclidean-momentum-step}
+\end{equation}
+The constant mobility \(M^n\equiv I_d\) satisfies
+\cref{eq:abstract-mobility-order} trivially, so
+\cref{thm:monotone-mobility-dissipation} applies for every
+\(0\leq\beta<1\); its mobility-change term vanishes, and the modified
+energy is \((q^n)^2+\norm{s^n}^2/(2\eta)\).
+
+\subsubsection{AMSGrad-type diagonal mobility}
+
+An AMSGrad-type maximum envelope \cite{reddi2018amsgrad} gives a diagonal
+mobility that is nonincreasing in the Loewner order. Let \(0\leq\beta_2<1\),
+\(\epsilon>0\), and initialize
+\(v^0=\overline v^0=0\).  With \(\odotv\) the componentwise product and the
+square root, division, and maximum below taken componentwise, define
+\begin{subequations}
+\label{eq:adaptive-second-moment}
+\begin{align}
+  v^{n+1}
+  &=\beta_2v^n+(1-\beta_2)(g^n\odotv g^n),
+  \label{eq:adaptive-v}\\
+  \widehat v^{n+1}
+  &=\frac{v^{n+1}}{1-\beta_2^{n+1}},
+  \label{eq:adaptive-bias-correction}\\
+  \overline v^{n+1}
+  &=\max\{\overline v^n,\widehat v^{n+1}\},
+  \label{eq:adaptive-max}\\
+  M^{n+1}
+  &=\diag\left(
+  \frac{1}{\sqrt{\overline v^{n+1}}+\epsilon}
+  \right).
+  \label{eq:adaptive-mobility}
+\end{align}
+\end{subequations}
+Then \(M^0=\epsilon^{-1}I_d\), and the maximum envelope implies
+\begin{equation}
+  0\prec M^{n+1}\preceq M^n,
+  \label{eq:adaptive-mobility-order}
+\end{equation}
+so \cref{thm:monotone-mobility-dissipation} applies to this mobility for
+every \(0\leq\beta<1\).

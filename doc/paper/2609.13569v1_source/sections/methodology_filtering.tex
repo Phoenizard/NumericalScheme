@@ -1,0 +1,83 @@
+\subsubsection{The inertial quadratic model}
+\label{sec:momentum-filtering}
+
+The implicit solve \cref{eq:abstract-momentum-step} has a quadratic
+optimization interpretation.
+
+\begin{proposition}
+\label{prop:inertial-model}
+The increment \(\Delta\theta^{n+1}\) solving
+\cref{eq:abstract-momentum-step} is the unique minimizer of
+\begin{equation}
+  \mathcal Q(s)
+  =\frac{q^n}{Q^n}(g^n)^{\mathsf T}s
+  +\frac12 s^{\mathsf T}B_\alpha^ns
+  +\frac{1}{2\eta}\norm{s-\beta M^{n+1}p^n}_{(M^{n+1})^{-1}}^2 .
+  \label{eq:inertial-quadratic-model}
+\end{equation}
+Appending the momentum after the solve gives instead
+\begin{equation}
+  \Delta_{\mathrm{app}}^{n+1}
+  =-\eta\frac{q^n}{Q^n}
+    \bigl((M^{n+1})^{-1}+\eta B_\alpha^n\bigr)^{-1}g^n
+   +\beta M^{n+1}p^n,
+  \label{eq:frozen-appended-comparator}
+\end{equation}
+and the two increments satisfy
+\begin{align}
+  \Delta_{\mathrm{app}}^{n+1}-\Delta\theta^{n+1}
+  &=\beta\eta\bigl((M^{n+1})^{-1}+\eta B_\alpha^n\bigr)^{-1}
+    B_\alpha^nM^{n+1}p^n,
+  \label{eq:appended-model-step-defect}\\
+  \mathcal Q(\Delta_{\mathrm{app}}^{n+1})-\mathcal Q(\Delta\theta^{n+1})
+  &=\frac{1}{2\eta}
+  \norm{\Delta_{\mathrm{app}}^{n+1}-\Delta\theta^{n+1}}
+       _{(M^{n+1})^{-1}+\eta B_\alpha^n}^2\geq0.
+  \label{eq:appended-model-excess}
+\end{align}
+\end{proposition}
+
+\begin{proof}
+The Hessian of \(\mathcal Q\) is
+\(B_\alpha^n+\eta^{-1}(M^{n+1})^{-1}\succ0\), and its optimality equation is
+\cref{eq:abstract-momentum-step}. Subtracting the two increments and using
+\(\bigl((M^{n+1})^{-1}+\eta B_\alpha^n\bigr)M^{n+1}
+ =I_d+\eta B_\alpha^nM^{n+1}\) gives
+\cref{eq:appended-model-step-defect}. Expanding \(\mathcal Q\) about its
+minimizer gives \cref{eq:appended-model-excess}.
+\end{proof}
+
+\begin{remark}
+\label{rem:inertial-gauss-newton}
+For a fixed \(\alpha\), let \(\Psi_\alpha(\theta)\) stack
+\(\sqrt{2(1-\alpha)}\,Q(\theta)\) on \(\sqrt{\alpha}\,\psi(\theta)\), so that
+\(\tfrac12\norm{\Psi_\alpha}^2=F+C\), its Gauss--Newton matrix is
+\(B_\alpha\), and its gradient is \(g\). At exact
+tracking \(q^n=Q^n\), the shifted model \(\mathcal Q(s)+F+C\) is a
+Gauss--Newton model for the residual map \(\Psi_\alpha\), together with a
+proximal term centered at \(\beta M^{n+1}p^n\) and measured in
+\(\norm{\cdot}_{(M^{n+1})^{-1}}\); otherwise the linear term is scaled by
+\(q^n/Q^n\). Levenberg--Marquardt methods for neural networks also combine curvature with
+adaptive momentum \cite{pooladzandi2022improving}, without the scalar
+coupling that produces the energy law below.
+\end{remark}
+
+To see how the solve acts on memory, let \(b_j\geq0\) be the eigenvalues of
+\((M^{n+1})^{1/2}B_\alpha^n(M^{n+1})^{1/2}\) and let \(u_j\) be the
+coordinates of \((M^{n+1})^{1/2}p^n\) in a corresponding orthonormal
+eigenbasis. In those coordinates the solve multiplies the \(j\)th component
+of the stored momentum by \(\beta/(1+\eta b_j)\), and
+\begin{equation}
+  \mathcal Q(\Delta_{\mathrm{app}}^{n+1})-\mathcal Q(\Delta\theta^{n+1})
+  =\frac{\beta^2\eta}{2}
+  \sum_j\frac{b_j^2}{1+\eta b_j}u_j^2 .
+  \label{eq:spectral-memory-coefficient}
+\end{equation}
+
+\begin{remark}
+\label{rem:memory-damping}
+Directions with larger \(b_j\) damp the stored momentum more strongly, and
+where \(b_j=0\) the coefficient remains \(\beta\). The excess in
+\cref{eq:spectral-memory-coefficient} is measured in the quadratic model, not
+in the modified energy of \cref{thm:monotone-mobility-dissipation}.
+\end{remark}

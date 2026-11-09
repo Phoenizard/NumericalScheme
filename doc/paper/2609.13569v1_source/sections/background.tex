@@ -1,0 +1,134 @@
+\section{Preliminaries}
+\label{sec:background}
+
+\subsection{Gradient flow and the scalar auxiliary variable}
+
+Let \(F:\R^d\to\R\) be differentiable and bounded from below. Gradient descent
+is the forward Euler discretization of the Euclidean gradient flow
+\(\dot\theta=-\nabla F(\theta)\), along which
+\(\tfrac{\mathrm d}{\mathrm dt}F=-\norm{\nabla F}^{2}\leq0\). Choose \(C\)
+with \(F(\theta)+C>0\) on the states of interest and set
+\(Q(\theta)=\sqrt{F(\theta)+C}\) and \(g(\theta)=\nabla F(\theta)\). In the SAV
+reformulation for gradient flows \cite{shen2018sav,shen2019savreview}, an
+auxiliary scalar \(q\) tracks \(Q(\theta(t))\) and the modified energy
+\(q^2\) satisfies
+\(\tfrac{\mathrm d}{\mathrm dt}q^2=-\norm{\dot\theta}^{2}\leq0\).
+Convergence and error analysis for the resulting schemes
+\cite{shen2018convergence} and a related energy-stable variant
+\cite{huang2020newsav} are available.
+
+For the discrete formulation, let \(g^n=g(\theta^n)\) and
+\(Q^n=Q(\theta^n)\), initialize \(q^0=Q(\theta^0)\), and let \(\eta>0\) be
+the step size. The first-order SAV update is
+\begin{subequations}
+\label{eq:discrete-sav-coupled}
+\begin{align}
+  \frac{\theta^{n+1}-\theta^n}{\eta}
+  &=-\frac{q^{n+1}}{Q^n}g^n,
+  \label{eq:discrete-sav-theta}\\
+  q^{n+1}-q^n
+  &=\frac{(g^n)^{\mathsf T}(\theta^{n+1}-\theta^n)}{2Q^n}.
+  \label{eq:discrete-sav-q}
+\end{align}
+\end{subequations}
+Writing \(\Delta\theta^{n+1}=\theta^{n+1}-\theta^n\) and eliminating
+\(q^{n+1}\) gives
+\begin{equation}
+  \left(\eta^{-1}I_d+B_1^n\right)\Delta\theta^{n+1}
+  =-\frac{q^n}{Q^n}g^n,
+  \qquad
+  B_1^n=
+  \frac{g^n(g^n)^{\mathsf T}}{2(Q^n)^2}.
+  \label{eq:sav-eliminated}
+\end{equation}
+Here \(I_d\) is the \(d\times d\) identity matrix, and identities of other
+sizes carry the corresponding subscript. The correction \(B_1^n\) has rank
+one, and \(q^n/Q^n=1\) when the stored scalar matches \(Q(\theta^n)\).
+
+\subsection{PB--SAV for composite objectives}
+
+Consider an additive objective
+\begin{equation}
+  F(\theta)=\sum_{i=1}^{m}E_i(\theta),
+  \qquad
+  E_i(\theta)+C_i>0,
+  \qquad
+  C=\sum_{i=1}^{m}C_i.
+  \label{eq:component-decomposition}
+\end{equation}
+Multiple-SAV methods assign a separate auxiliary variable to each energy
+component \cite{cheng2018msav}. PB--SAV instead retains one auxiliary variable
+for the total shifted objective and builds the correction from the individual
+components \cite{zhang2026pbsav}.
+
+At \(\theta^n\), define
+\begin{equation}
+  Q_i^n=\sqrt{E_i(\theta^n)+C_i},
+  \qquad
+  g_i^n=\nabla E_i(\theta^n),
+  \qquad
+  g^n=\sum_{i=1}^{m}g_i^n,
+  \label{eq:component-notation-preview}
+\end{equation}
+so that \((Q^n)^2=\sum_{i=1}^{m}(Q_i^n)^2\). The component matrix is
+\begin{equation}
+  V^n=
+  \begin{bmatrix}
+  \dfrac{g_1^n}{\sqrt{2}Q_1^n}
+  &\cdots&
+  \dfrac{g_m^n}{\sqrt{2}Q_m^n}
+  \end{bmatrix},
+  \qquad
+  B_m^n=V^n(V^n)^{\mathsf T}.
+  \label{eq:pbsav-preview}
+\end{equation}
+
+\subsection{Component curvature}
+\label{sec:recalled-geometry}
+
+The PB--SAV pullback is a Gauss--Newton matrix for the transformed residuals
+\cite{zhang2026pbsav}
+\begin{equation}
+  \psi_i(\theta)=\sqrt{2(E_i(\theta)+C_i)},
+\end{equation}
+with \(\psi=(\psi_1,\ldots,\psi_m)^{\mathsf T}\) and
+\(F+C=\tfrac12\norm{\psi}^2\). If \(J_\psi(\theta)\) denotes its Jacobian,
+differentiation gives
+\begin{equation}
+  B_m^n=J_\psi(\theta^n)^{\mathsf T}J_\psi(\theta^n).
+  \label{eq:background-pullback-gn}
+\end{equation}
+For scalar least-squares components \(E_i=\tfrac12 r_i^2\) with \(C_i>0\),
+this formula becomes
+\begin{equation}
+  B_m
+  =\sum_{i=1}^m
+  \frac{r_i^2}{r_i^2+2C_i}\,
+  \nabla r_i\nabla r_i^{\mathsf T}.
+  \label{eq:residual-pullback-curvature}
+\end{equation}
+Thus the component pullback approximates the Gauss--Newton matrix
+\(G=\sum_i\nabla r_i\nabla r_i^{\mathsf T}\) when the shifts are small
+relative to the squared residuals. For twice continuously differentiable
+residuals,
+\begin{equation}
+  \nabla^2F=G+\sum_i r_i\nabla^2r_i,
+  \label{eq:least-squares-hessian}
+\end{equation}
+so the residual-weighted second derivatives determine the difference between
+Gauss--Newton and Hessian curvature \cite{bjorck1996least}.
+
+The relation to the aggregate correction follows from a weighted variance
+identity \cite{zhang2026pbsav}. For any \(z\in\R^d\), define
+\begin{equation}
+  y_i^n=\frac{z^{\mathsf T}g_i^n}{(Q_i^n)^2},
+  \qquad
+  \bar y^n=\frac{\sum_i(Q_i^n)^2y_i^n}{\sum_i(Q_i^n)^2}.
+\end{equation}
+Then
+\begin{equation}
+  z^{\mathsf T}(B_m^n-B_1^n)z
+  =\frac12\sum_i(Q_i^n)^2(y_i^n-\bar y^n)^2\geq0.
+  \label{eq:background-variance-gap}
+\end{equation}
+Thus \(B_m^n-B_1^n\succeq0\).

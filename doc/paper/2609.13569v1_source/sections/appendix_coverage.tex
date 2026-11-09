@@ -1,0 +1,126 @@
+\section{A curvature condition for exact scalar tracking}
+\label[appendix]{app:directional-coverage}
+
+Full relaxation preserves exact scalar tracking when the correction covers
+the true objective remainder along each step, up to a fixed fraction of the
+inertial dissipation. Define
+\begin{equation}
+  R_F^n=F(\theta^{n+1})-F(\theta^n)
+        -(g^n)^{\mathsf T}\Delta\theta^{n+1}
+  \label{eq:true-objective-remainder}
+\end{equation}
+and the inertial part of the dissipation,
+\begin{equation}
+\begin{aligned}
+  \mathcal D_{\mathrm{in}}^n
+  ={}&\frac{\norm{p^n}_{M^n-M^{n+1}}^2}{2\eta}
+  +\frac{\norm{p^{n+1}-\beta p^n}_{M^{n+1}}^2}{2\eta}\\
+  &+\frac{1-\beta^2}{2\eta}\norm{p^n}_{M^{n+1}}^2.
+\end{aligned}
+\label{eq:inertial-dissipation}
+\end{equation}
+The true objective with kinetic energy is
+\begin{equation}
+  \E^n=F(\theta^n)+C+\frac{\norm{p^n}_{M^n}^2}{2\eta}.
+  \label{eq:true-inertial-energy}
+\end{equation}
+
+\begin{proposition}
+\label{prop:true-energy-identity}
+At a consistent state \(q^n=Q^n\), the momentum update satisfies
+\begin{equation}
+  \E^n-\E^{n+1}
+  =\mathcal D_{\mathrm{in}}^n
+   +\norm{\Delta\theta^{n+1}}_{B_\alpha^n}^2-R_F^n.
+  \label{eq:true-energy-identity}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Take the inner product of \cref{eq:abstract-momentum-balance} with
+\(\Delta\theta^{n+1}=M^{n+1}p^{n+1}\) and use weighted polarization.
+With \(q^n/Q^n=1\), this gives
+\[
+  \frac{\norm{p^n}_{M^n}^2-\norm{p^{n+1}}_{M^{n+1}}^2}{2\eta}
+  =\mathcal D_{\mathrm{in}}^n+(g^n)^{\mathsf T}\Delta\theta^{n+1}
+   +\norm{\Delta\theta^{n+1}}_{B_\alpha^n}^2.
+\]
+Subtract the true objective increment to obtain
+\cref{eq:true-energy-identity}.
+\end{proof}
+
+\begin{theorem}
+\label{thm:coverage-full-relaxation}
+Fix \(\eta>0\), \(0\leq\beta<1\), and \(0\leq\alpha\leq1\), and
+let \(0\prec M^{n+1}\preceq M^n\). Initialize \(q^0=Q(\theta^0)\)
+and use full relaxation \(\rho^n\equiv1\). Suppose that every step is
+well defined and satisfies
+\begin{equation}
+  R_F^n\leq\norm{\Delta\theta^{n+1}}_{B_\alpha^n}^2
+          +\gamma^n\mathcal D_{\mathrm{in}}^n,
+  \qquad 0\leq\gamma^n\leq\bar\gamma<1.
+  \label{eq:directional-coverage-condition}
+\end{equation}
+Then \(q^n=Q(\theta^n)\) for every \(n\), and
+\begin{equation}
+  \E^n-\E^{n+1}\geq(1-\bar\gamma)\mathcal D_{\mathrm{in}}^n\geq0.
+  \label{eq:coverage-energy-law}
+\end{equation}
+If also \(\mu_{\min} I_d\preceq M^n\preceq\mu_{\max} I_d\) for
+constants \(0<\mu_{\min}\leq\mu_{\max}<\infty\), and
+\(\sup_n\norm{B_\alpha^n}<\infty\), then
+\(p^n\to0\), \(\Delta\theta^{n+1}\to0\), and
+\(\nabla F(\theta^n)\to0\).
+\end{theorem}
+
+\begin{proof}
+Suppose \(q^n=Q^n\). Combining the modified and true energy identities
+gives
+\begin{equation}
+  (\bar q^{n+1})^2+\mathcal D^n-Q(\theta^{n+1})^2
+  =\mathcal D_{\mathrm{in}}^n
+   +\norm{\Delta\theta^{n+1}}_{B_\alpha^n}^2-R_F^n\geq0.
+  \label{eq:coverage-scalar-budget}
+\end{equation}
+Thus the minimum in \cref{eq:generic-relaxation} selects
+\(Q(\theta^{n+1})^2\). Induction proves exact tracking, and
+\cref{eq:true-energy-identity} yields \cref{eq:coverage-energy-law}.
+
+Since \(\E^n\geq0\), summing the energy law gives
+\(\sum_n\mathcal D_{\mathrm{in}}^n<\infty\). The damping and residual
+terms, with the uniform lower mobility bound and \(\beta<1\), imply
+\(p^n\to0\) and \(p^{n+1}-\beta p^n\to0\). The upper bound gives
+\(\Delta\theta^{n+1}=M^{n+1}p^{n+1}\to0\). Finally,
+\cref{eq:abstract-momentum-balance}, exact tracking, and the bounded
+pullback imply \(g^n\to0\).
+\end{proof}
+
+For a quadratic objective, the condition with \(\gamma^n=0\) becomes
+\[
+  \frac12(\Delta\theta^{n+1})^{\mathsf T}H\Delta\theta^{n+1}
+  \leq\norm{\Delta\theta^{n+1}}_{B_\alpha^n}^2.
+\]
+The correction must cover half the Hessian quadratic form along the step, not
+dominate the Hessian in every direction. For nonlinear least squares, write
+\(\nabla^2F(\theta^n)=G^n+A^n\), where \(G^n\) is the residual
+Gauss--Newton matrix. If \(\norm{A^n}\leq\varepsilon^n\) and the Hessian
+is Lipschitz along the step segment with constant \(L^n\), Taylor's formula
+gives
+\[
+  R_F^n\leq\frac12\norm{\Delta\theta^{n+1}}_{G^n}^2
+  +\frac{\varepsilon^n}{2}\norm{\Delta\theta^{n+1}}^2
+  +\frac{L^n}{6}\norm{\Delta\theta^{n+1}}^3.
+\]
+Consequently, a sufficient condition is
+\begin{equation}
+  (\Delta\theta^{n+1})^{\mathsf T}
+  \left(B_\alpha^n-\frac12G^n\right)\Delta\theta^{n+1}
+  \geq\frac{\varepsilon^n}{2}\norm{\Delta\theta^{n+1}}^2
+      +\frac{L^n}{6}\norm{\Delta\theta^{n+1}}^3.
+  \label{eq:least-squares-coverage-margin}
+\end{equation}
+The projection identity \cref{eq:missed-block-curvature} describes the
+curvature omitted by the least-squares components. Neither that identity nor
+modified energy dissipation alone imposes
+\cref{eq:directional-coverage-condition}, which can instead be checked from
+the objective increment without forming a Hessian.

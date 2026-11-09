@@ -34,7 +34,7 @@ PROBLEMS = {
         "steps": 5000,
         "lambda_reg": 3e-5,
         "sgd": {"momentum": 0.9},
-        "total_shift": 0.0,
+        "total_shift": 1e-12,  # 论文未给出；按约定取总 shift 1e-12
         "pb_sav_momentum": {
             "momentum": 0.9,
             "alpha": 0.5,

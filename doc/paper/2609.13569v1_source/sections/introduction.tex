@@ -1,0 +1,105 @@
+\section{Introduction}
+\label{sec:introduction}
+
+Many scientific machine learning problems have objectives with \(m\) prescribed
+components,
+\begin{equation}
+F(\theta)=\sum_{i=1}^{m}E_i(\theta).
+\label{eq:intro-objective}
+\end{equation}
+For example, physics-informed neural network (PINN) objectives may combine
+residual, boundary, initial-condition, and data terms
+\cite{raissi2019pinn,karniadakis2021physics}, with regularization added when
+needed. In operator learning such as DeepONet \cite{lu2021deeponet} , a data term can likewise be separated from
+weight decay. These components can have different scales and gradient
+directions. Once their gradients are summed, part of this directional
+information may be hidden by aggregation or cancellation. Imbalance between
+the residual and boundary terms of a PINN objective, and its effect on
+training, motivate the adaptive loss weighting developed for physics-informed
+models \cite{wang2021gradientpathologies,wang2022pinnntk,mcclenny2023selfadaptive}.
+Those methods rescale the components before they are summed. The method
+developed here keeps the sum in \cref{eq:intro-objective} as it stands and
+uses the component gradients to build the curvature inside the solve.
+
+Most first-order optimization methods act primarily on the aggregated
+gradient. Momentum incorporates information from previous iterations
+\cite{polyak1964}, while adaptive methods such as Adam and AMSGrad introduce
+coordinatewise scaling \cite{kingma2015adam,reddi2018amsgrad}. Neither
+mechanism directly uses the prescribed component structure of the objective.
+In an energy-dissipative scheme, momentum adds cross-iteration terms and
+adaptive scaling changes the quadratic form in which those terms are measured.
+
+The scalar auxiliary variable (SAV) approach constructs energy-stable schemes
+\cite{shen2018sav,shen2019savreview}. Originally developed for dissipative
+gradient flows, SAV and its relaxed variants introduce auxiliary variables so
+that a modified energy satisfies a discrete dissipation law
+\cite{jiang2022rsav,zhang2022gsavrelax}. These ideas have been carried to
+finite-dimensional optimization \cite{liu2022,liu2023savopt}, including a
+relaxed vector auxiliary variable algorithm for unconstrained problems
+\cite{zhang2025rvsavopt, ZHANGop1, ZHANGop2}. Standard SAV methods,
+however, primarily depend on the total gradient and therefore do not fully
+exploit the decomposition in \cref{eq:intro-objective}.
+
+The pullback-corrected SAV (PB--SAV) family for gradient flows
+\cite{zhang2026pbsav} separates energy tracking from the curvature
+correction. A single scalar auxiliary variable tracks the total
+shifted objective, while the component gradients generate the positive
+semidefinite matrix
+\[
+B_m
+=
+\sum_{i=1}^{m}
+\frac{\nabla E_i(\theta)\nabla E_i(\theta)^{\mathsf T}}
+{2\bigl(E_i(\theta)+C_i\bigr)}.
+\]
+Here each shift \(C_i\) is chosen so that \(E_i(\theta)+C_i>0\). The matrix
+\(B_m\) retains the component gradient directions and has rank at most \(m\).
+Its Gauss--Newton interpretation and the corresponding approximation of
+quadratic Hessians are established in \cite{zhang2026pbsav}. In a direct
+Euclidean step, the aggregate SAV correction only rescales the gradient, while the component pullback can also change its direction. The correction therefore uses only component energies and
+first derivatives.
+\Cref{sec:background} restates that construction. We build on it an
+optimizer with momentum and adaptive scaling, and determine how the component
+curvature enters its energy law and its local stability condition.
+
+Our main contributions are as follows.
+\begin{itemize}[leftmargin=*]
+
+\item \textbf{Component curvature and local stability.}
+\Cref{prop:block-compression} characterizes the Gauss--Newton curvature
+retained by a vector-valued least-squares component. For fixed mobility,
+\cref{thm:local-schur-stability,cor:local-step-interval} give the exact local
+stability condition and quantify the change in admissible step sizes relative
+to the aggregate correction, including the
+case in which the component gradients cancel, so that the aggregate correction
+vanishes while the component correction does not.
+
+\item \textbf{Momentum inside the solve.}
+The gradient and stored momentum enter one implicit equation.
+\Cref{prop:inertial-model} identifies its quadratic model and the excess
+incurred by appending momentum after the solve, and
+\cref{prop:appended-momentum-defect} shows that the corresponding identity
+for the appended construction carries a cross term of indefinite sign. For the momentum update,
+\cref{thm:monotone-mobility-dissipation} establishes an exact modified energy
+law for positive definite mobilities that are nonincreasing in the Loewner
+order, including Euclidean and AMSGrad-type choices.
+
+\item \textbf{Convergence of the relaxed update.}
+Under the local stability condition,
+\cref{thm:local-relaxed-convergence} proves local geometric convergence near a
+nondegenerate minimum for fixed mobility and every scalar relaxation
+sequence. For varying mobility,
+\cref{thm:conditional-stationarity,cor:best-iterate-stationarity} give
+stationarity and an \(O(N^{-1/2})\) best-iterate gradient bound under uniform
+mobility and curvature bounds, a positive lower bound on \(q^n/Q^n\), and
+relaxation parameters bounded away from one.
+
+\end{itemize}
+
+\Cref{sec:background} introduces SAV and the PB--SAV geometry.
+\Cref{sec:methodology} presents the method and analysis; the implementation
+in \cref{alg:pbsav} uses a dense solve of order at most \(m\)
+(\cref{prop:low-rank-solution}). \Cref{sec:experiments} reports five numerical
+experiments and \cref{sec:conclusion} concludes. Longer proofs
+appear in \ref{app:convergence-proofs}. \ref{app:directional-coverage} gives a
+curvature condition for exact scalar tracking under full relaxation.

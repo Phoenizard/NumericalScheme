@@ -1,0 +1,160 @@
+\subsection{Momentum placement and mobility}
+\label{sec:monotone-mobility}
+
+The direct update stores the scalar \(q^n\) but no previous increment. Momentum
+carries previous increments into the current step. Euclidean heavy-ball momentum \cite{polyak1964} retains a fraction
+\(\beta\) of the previous parameter increment \(s^n\),
+\begin{equation}
+  s^{n+1}=\beta s^n-\eta g^n,\qquad
+  \theta^{n+1}=\theta^n+s^{n+1},\qquad 0\leq\beta<1,
+  \label{eq:heavy-ball-step}
+\end{equation}
+and reduces to gradient descent at \(\beta=0\).
+
+\subsubsection{Placement of momentum}
+
+Consider first computing the direct PB--SAV increment and then appending
+heavy-ball memory:
+\begin{subequations}
+\label{eq:appended-momentum}
+\begin{align}
+  \left(\eta^{-1}I_d+B_\alpha^n\right)\delta_{\mathrm{PB}}^{n+1}
+  &=-\frac{q^n}{Q^n}g^n,
+  \label{eq:appended-base-step}\\
+  s^{n+1}&=\delta_{\mathrm{PB}}^{n+1}+\beta s^n,\\
+  \theta^{n+1}&=\theta^n+s^{n+1},
+  \qquad q^{n+1}=q^n+d^{n+1},
+\end{align}
+\end{subequations}
+where \(d^{n+1}=(g^n)^{\mathsf T}s^{n+1}/(2Q^n)\). The scalar update uses
+the total increment. Define the Euclidean modified energy
+\begin{equation}
+  \Hcal_{\mathrm{app}}^n=(q^n)^2+\frac{\norm{s^n}^2}{2\eta}.
+  \label{eq:appended-energy}
+\end{equation}
+
+\begin{proposition}
+\label{prop:appended-momentum-defect}
+The update \cref{eq:appended-momentum} satisfies
+\begin{equation}
+\begin{aligned}
+  \Hcal_{\mathrm{app}}^n-\Hcal_{\mathrm{app}}^{n+1}
+  ={}&\frac{\norm{s^{n+1}-\beta s^n}^2}{2\eta}
+  +\frac{1-\beta^2}{2\eta}\norm{s^n}^2\\
+  &+(d^{n+1})^2+\alpha\norm{s^{n+1}}_{S_m^n}^2
+  -\beta(s^{n+1})^{\mathsf T}B_\alpha^n s^n.
+\end{aligned}
+\label{eq:appended-momentum-defect}
+\end{equation}
+The last term has no fixed sign.
+\end{proposition}
+
+\begin{proof}
+The total increment obeys
+\((\eta^{-1}I_d+B_\alpha^n)(s^{n+1}-\beta s^n)=-(q^n/Q^n)g^n\).
+Take its inner product with \(s^{n+1}\) and apply
+\cref{eq:common-identities}. Subtracting the change in kinetic energy and
+using Euclidean polarization gives \cref{eq:appended-momentum-defect}.
+\end{proof}
+
+\subsubsection{The momentum and the mobility}
+
+We place momentum on the right-hand side of the implicit solve, so that the
+pullback acts on the gradient and memory together. This removes the extra
+\(\beta B_\alpha^n s^n\) term in the appended state equation.
+Let \(p^n\in\R^d\) be the momentum and let the mobility
+\(M^n\in\R^{d\times d}\), symmetric positive definite, map it to the
+parameter increment \(M^np^n\); this is the mobility in gradient-flow
+terminology and a variable-metric preconditioner in optimization. The new
+momentum and increment are related by
+\begin{equation}
+  \Delta\theta^{n+1}=M^{n+1}p^{n+1},
+  \qquad
+  p^{n+1}=(M^{n+1})^{-1}\Delta\theta^{n+1}.
+  \label{eq:covector-map}
+\end{equation}
+We assume that the mobility is nonincreasing in the Loewner order:
+\begin{equation}
+  0\prec M^{n+1}\preceq M^n.
+  \label{eq:abstract-mobility-order}
+\end{equation}
+The PB--SAV momentum update is
+\begin{equation}
+  \left((M^{n+1})^{-1}+\eta B_\alpha^n\right)
+  \Delta\theta^{n+1}
+  =\beta p^n-\eta\frac{q^n}{Q^n}g^n,
+  \label{eq:abstract-momentum-step}
+\end{equation}
+or, equivalently,
+\begin{equation}
+  \frac{p^{n+1}-\beta p^n}{\eta}
+  +B_\alpha^n\Delta\theta^{n+1}
+  +\frac{q^n}{Q^n}g^n=0.
+  \label{eq:abstract-momentum-balance}
+\end{equation}
+With Euclidean mobility, omitting the pullback term and setting \(q^n/Q^n=1\)
+in this balance gives the heavy-ball recursion \cref{eq:heavy-ball-step},
+with \(p^n=s^n\).
+The parameter and scalar states remain
+\begin{equation}
+  \theta^{n+1}=\theta^n+\Delta\theta^{n+1},
+  \qquad
+  q^{n+1}=q^n+d^{n+1}.
+  \label{eq:abstract-momentum-states}
+\end{equation}
+
+\input{sections/methodology_filtering}
+
+\subsubsection{Curvature action of the momentum step}
+\label{sec:curvature-action}
+
+The following comparison measures the approximation error of the correction
+through its action on the reference increment.
+
+\begin{proposition}
+\label{prop:curvature-action}
+Let \(M\succ0\), let \(A,B\succeq0\) be symmetric, and let \(\eta>0\).
+For a common right-hand side \(f\in\R^d\), define
+\begin{equation}
+  (M^{-1}+\eta B)\Delta_B=f,
+  \qquad
+  (M^{-1}+\eta A)\Delta_A=f.
+  \label{eq:curvature-reference-steps}
+\end{equation}
+Then
+\begin{equation}
+  \Delta_B-\Delta_A
+  =\eta(M^{-1}+\eta B)^{-1}(A-B)\Delta_A,
+  \label{eq:curvature-action-identity}
+\end{equation}
+and
+\begin{equation}
+  \norm{\Delta_B-\Delta_A}_{M^{-1}}
+  \leq\eta\norm{M^{1/2}(A-B)\Delta_A}.
+  \label{eq:curvature-action-bound}
+\end{equation}
+In particular, \(\Delta_B=\Delta_A\) if and only if
+\((A-B)\Delta_A=0\).
+\end{proposition}
+
+\begin{proof}
+Subtracting the two systems gives \cref{eq:curvature-action-identity}.
+Since \(M^{1/2}BM^{1/2}\succeq0\), we have
+\(\norm{(I_d+\eta M^{1/2}BM^{1/2})^{-1}}_2\leq1\); multiplying
+\cref{eq:curvature-action-identity} by \(M^{-1/2}\) then gives
+\cref{eq:curvature-action-bound}. The equality criterion follows from
+invertibility of \(M^{-1}+\eta B\).
+\end{proof}
+
+\begin{remark}
+\label{rem:curvature-action}
+For the momentum update, take \(M=M^{n+1}\), \(B=B_\alpha^n\), and
+\(f=\beta p^n-\eta(q^n/Q^n)g^n\); a Gauss--Newton matrix, or a positive
+semidefinite Hessian at the current state, can serve as \(A\). A low-rank \(B\)
+approximates \(\Delta_A\) when the weighted action error on the right-hand
+side of \cref{eq:curvature-action-bound} is small, even when \(A-B\) is not
+small in operator norm, and reproduces it exactly when
+\((A-B)\Delta_A=0\). The quadratic and regression tests
+in \cref{sec:quadratic-experiment,sec:regression-experiment} measure the
+matrix error and the step error separately.
+\end{remark}
